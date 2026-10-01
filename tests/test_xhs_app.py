@@ -251,6 +251,13 @@ class PairingAndConsoleTest(unittest.TestCase):
             os.geteuid = lambda: 1000  # type: ignore[attr-defined]
             self.assertEqual(xhs_browser.chromium_launch_args(), [])
             self.assertEqual(xhs_browser.chromium_launch_kwargs()["args"], [])
+            boxes = [(48.0, 48.0, False), (420.0, 70.0, False), (180.0, 180.0, False)]
+            self.assertEqual(xhs_browser.choose_qr_index(boxes), 2)
+            self.assertEqual(
+                xhs_browser.choose_qr_index([(200.0, 200.0, False), (160.0, 160.0, True)]),
+                1,
+            )
+            self.assertIsNone(xhs_browser.choose_qr_index([(40.0, 40.0, False)]))
         finally:
             if original is None:
                 delattr(os, "geteuid")
