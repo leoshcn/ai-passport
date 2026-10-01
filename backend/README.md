@@ -26,6 +26,8 @@ Allow inbound TCP `8787` for `com.docker.backend.exe`, and inbound UDP `8788` fo
 
 Open `http://127.0.0.1:8790`. The page shows one status: logged out, logged in, or expired (`logged_out`, `logged_in`, `expired`). Login opens the official creator QR page in a program-controlled browser. The cookie is stored only after the existing stats fetch succeeds. A pasted cookie uses that same check. The page, logs, and device stats responses do not include the cookie or the device token.
 
+The page button labeled 退出登录 clears the saved creator session and the stats cache so another account can sign in. The device pairing and its token stay. The device keeps the last numbers on screen until the new account's fetch succeeds.
+
 Cookie and pairing state are in the `xhs-data` volume and survive a container restart.
 
 `GET /api/v1/stats` and `GET /api/v1/avatar` are unchanged. Both require header `X-Device-Token`. Stats are cached for 30 seconds. A missing cookie or a rejected session returns HTTP 503 and `{"ok": false}` without logging the cookie.

@@ -165,12 +165,25 @@ class Service:
 
     def stop_login(self) -> None:
         self._watch_stop.set()
+        watch = self._watch
+        if watch is not None and watch is not threading.current_thread():
+            watch.join(timeout=25)
         with self._browser_lock:
             browser = self._browser
             self._browser = None
             self._qr = None
         if browser is not None:
             browser.close()
+
+    def logout(self) -> None:
+        """Drop the creator session so another account can sign in."""
+        self._watch_stop.set()
+        self.state.clear_login()
+        clear_snapshot_cache()
+        self.stop_login()
+        with self._browser_lock:
+            self._login_error = ""
+        print("login logged_out")
 
     def qr_png(self) -> bytes | None:
         with self._browser_lock:
@@ -189,6 +202,8 @@ class Service:
             if not raw:
                 continue
             status = self.state.accept_cookie(raw)
+            if self._watch_stop.is_set():
+                return
             print("login %s" % status)
             if status != "logged_in":
                 self._login_error = "手机已确认，账号数据还没读到"
@@ -217,6 +232,11 @@ class Service:
                 )
         qr = "<p><img alt=\"qr\" src=\"/api/login/qr\"></p>" if self.qr_png() else ""
         hint = "<p>扫码并在手机上同意后，标题会变成已登录。下面的输入框不会自动填写。</p>" if qr else ""
+        hidden = "" if login != "logged_out" else " style=\"display:none\""
+        logout = (
+            "<form id=\"logout\" method=\"post\" action=\"/api/login/logout\"%s>"
+            "<button type=\"submit\">退出登录</button></form>" % hidden
+        )
         page = """<!DOCTYPE html>
 <meta charset="utf-8">
 <title>Xiaohongshu console</title>
@@ -225,6 +245,7 @@ class Service:
 %s
 %s
 <form method="post" action="/api/login/start"><button type="submit">登录</button></form>
+%s
 <form method="post" action="/api/login/paste">
 <textarea name="cookie" rows="4" cols="48"></textarea>
 <button type="submit">提交 Cookie</button>
@@ -239,6 +260,8 @@ setInterval(function () {
     title.textContent = label;
     var note = document.getElementById("notice");
     if (note) note.textContent = data.notice || "";
+    var logout = document.getElementById("logout");
+    if (logout) logout.style.display = data.login === "logged_out" ? "none" : "";
     if (data.login === "logged_in") {
       var image = document.querySelector("img[alt=qr]");
       if (image && image.parentNode) image.parentNode.removeChild(image);
@@ -246,7 +269,7 @@ setInterval(function () {
   }).catch(function () {});
 }, 3000);
 </script>
-""" % (LOGIN_LABELS[login], _html_escape(self._login_error), hint, qr, "".join(rows))
+""" % (LOGIN_LABELS[login], _html_escape(self._login_error), hint, qr, logout, "".join(rows))
         return page.encode("utf-8")
 
 
@@ -374,6 +397,13 @@ class Handler(BaseHTTPRequestHandler):
 
     def _console_post(self, route: str) -> None:
         service = self._service()
+        if route == "/api/login/logout":
+            body = self._read_limited(64)
+            if body is None:
+                return
+            service.logout()
+            self._redirect()
+            return
         if route == "/api/login/start":
             body = self._read_limited(64)
             if body is None:

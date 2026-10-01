@@ -26,6 +26,8 @@ powershell -File backend/start-xhs.ps1
 
 浏览器打开 `http://127.0.0.1:8790`。页面只有三种状态：未登录、已登录、已失效（`logged_out`、`logged_in`、`expired`）。登录会用程序控制的浏览器打开创作者平台自己的扫码页。只有现有的统计拉取成功之后，Cookie 才会写入数据卷。粘贴 Cookie 走同一条检查。页面、日志和设备的统计响应都不包含 Cookie 或设备令牌。
 
+退出登录会清掉已保存的创作者会话和统计缓存，以便换一个账号再扫码。设备配对和令牌保留。设备屏幕会继续显示上一份数字，直到新账号的数据拉取成功。
+
 Cookie 和配对状态放在 `xhs-data` 数据卷里，容器重启后还在。
 
 `GET /api/v1/stats` 和 `GET /api/v1/avatar` 保持原样。两个请求都要带 `X-Device-Token`。统计缓存 30 秒。缺少 Cookie 或会话被拒绝时返回 HTTP 503 和 `{"ok": false}`，日志里不写 Cookie。

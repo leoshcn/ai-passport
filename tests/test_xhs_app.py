@@ -204,13 +204,55 @@ class PairingAndConsoleTest(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertNotIn(GOOD_COOKIE.encode("utf-8"), page)
         self.assertIn("已登录".encode("utf-8"), page)
-        self.assertNotIn(b"logged_out", page)
+        self.assertNotIn(b"<h1 id=\"state\">logged_out</h1>", page)
 
         reloaded_browser = FakeLoginBrowser(GOOD_COOKIE)
         self.assertEqual(self.state.adopt_browser_cookie(reloaded_browser), "logged_in")
         self.assertTrue(reloaded_browser.closed)
         again = type(self.state)(self.state.data_dir, fake_fetch)
         self.assertEqual(again.login_status(), "logged_in")
+
+    def test_logout_clears_the_creator_session_and_keeps_pairing(self) -> None:
+        code = "AB3K"
+        self._request(self.api_url + "/api/v1/pair?code=" + code)
+        status, _body = self._request(
+            self.console_url + "/api/pair/confirm",
+            data=json.dumps({"code": code}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(status, 200)
+        token = self.state.read_token()
+        self.state.accept_cookie(GOOD_COOKIE)
+        status, page = self._request(self.console_url + "/")
+        self.assertIn("退出登录".encode("utf-8"), page)
+        self.assertNotIn(b"display:none", page)
+
+        def fetch_during_logout(cookie: str, when: datetime | None = None):
+            del cookie, when
+            self.state.clear_login()
+            return fake_fetch(GOOD_COOKIE)
+
+        self.state._fetch = fetch_during_logout
+        self.assertEqual(self.state.accept_cookie(GOOD_COOKIE), "logged_out")
+        self.assertFalse(self.state.cookie_path.is_file())
+        self.state._fetch = fake_fetch
+        self.state.accept_cookie(GOOD_COOKIE)
+
+        status, page = self._request(self.console_url + "/api/login/logout", data=b"")
+        self.assertEqual(status, 200)
+        self.assertIn("未登录".encode("utf-8"), page)
+        self.assertIn(b"display:none", page)
+        self.assertNotIn(GOOD_COOKIE.encode("utf-8"), page)
+        self.assertNotIn(token.encode("utf-8"), page)
+        self.assertFalse(self.state.cookie_path.is_file())
+        self.assertEqual(self.state.read_token(), token)
+        self.assertEqual(self.state.login_status(), "logged_out")
+        denied, body = self._request(
+            self.api_url + "/api/v1/stats",
+            headers={"X-Device-Token": token},
+        )
+        self.assertEqual(denied, 503)
+        self.assertNotIn(GOOD_COOKIE.encode("utf-8"), body)
 
     def test_qr_login_uses_the_fake_browser(self) -> None:
         self.assertNotIn("playwright", sys.modules)

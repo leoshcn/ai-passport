@@ -36,6 +36,7 @@ class XhsState:
         self._pending: list[str] = []
         self._confirmed: str = ""
         self._token_acked = False
+        self._login_generation = 0
         self._load_pairing()
 
     @property
@@ -119,11 +120,20 @@ class XhsState:
             return "logged_in"
         return "logged_in"
 
+    def clear_login(self) -> None:
+        """Remove the creator cookie. Pairing and the device token stay."""
+        with self._lock:
+            self._login_generation += 1
+            if self.cookie_path.is_file():
+                self.cookie_path.unlink()
+
     def accept_cookie(self, raw: str) -> str:
         """Persist only when fetch_stats succeeds. Never echo the cookie."""
         cookie = normalize_cookie(raw or "")
         if not cookie:
             return self.login_status()
+        with self._lock:
+            generation = self._login_generation
         try:
             self._fetch(cookie)
         except urllib.error.HTTPError as error:
@@ -133,6 +143,8 @@ class XhsState:
         except (OSError, urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError):
             return self.login_status()
         with self._lock:
+            if generation != self._login_generation:
+                return "logged_out"
             self._write_secret(self.cookie_path, cookie)
         return "logged_in"
 
