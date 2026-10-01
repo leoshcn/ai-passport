@@ -2,13 +2,41 @@ FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
-RUN apt-get update \
+# files.pythonhosted.org and deb.debian.org time out from this server.
+# Point apt and pip at mirrors, and try a second mirror if the first stalls.
+RUN set -eu; \
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then \
+        sed -i \
+            -e 's|https\?://deb.debian.org|https://mirrors.aliyun.com|g' \
+            -e 's|https\?://security.debian.org|https://mirrors.aliyun.com|g' \
+            /etc/apt/sources.list.d/debian.sources; \
+    fi; \
+    if [ -f /etc/apt/sources.list ]; then \
+        sed -i \
+            -e 's|https\?://deb.debian.org|https://mirrors.aliyun.com|g' \
+            -e 's|https\?://security.debian.org|https://mirrors.aliyun.com|g' \
+            /etc/apt/sources.list; \
+    fi; \
+    apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl unzip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt /tmp/requirements.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt \
-    && pip install --no-cache-dir playwright==1.49.1
+RUN set -eu; \
+    ok=0; \
+    for index in \
+        https://pypi.tuna.tsinghua.edu.cn/simple \
+        https://mirrors.aliyun.com/pypi/simple \
+        https://pypi.org/simple; \
+    do \
+        echo "pip index ${index}"; \
+        if pip install --no-cache-dir --timeout 180 --retries 8 -i "${index}" -r /tmp/requirements.txt \
+            && pip install --no-cache-dir --timeout 180 --retries 8 -i "${index}" playwright==1.49.1; then \
+            ok=1; \
+            break; \
+        fi; \
+    done; \
+    test "${ok}" = 1
 
 # OS libraries only. This does not download a browser.
 RUN playwright install-deps chromium \
