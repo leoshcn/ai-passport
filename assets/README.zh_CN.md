@@ -15,6 +15,17 @@
 - 添加字库前评估 Flash 与内部 RAM 影响；ESP32-C3 无 PSRAM。
 - 不提交许可不允许分发的字库。
 
+| 文件 | 规格 | 用途与来源 |
+| --- | --- | --- |
+| [`fonts/xhs_font_16.c`](fonts/xhs_font_16.c) | 16 像素、4 bpp、未压缩的 LVGL 9 字库 | 仪表盘文案和账号名。包含可打印 ASCII，以及 [`fonts/xhs_ui_symbols.txt`](fonts/xhs_ui_symbols.txt) 里的字符：GB2312 一级汉字和界面用到的标点。由 `main/CMakeLists.txt` 编进固件。不在这份清单里的用户名会再试 LVGL 内置的思源黑体 16 CJK（约 1000 字）；两边都没有的字保持缺字方框。 |
+| [`fonts/xhs_ui_symbols.txt`](fonts/xhs_ui_symbols.txt) | UTF-8 字符清单 | 从源字库取出的非 ASCII 字符。 |
+
+源字库是 Noto Sans CJK SC Regular（`NotoSansCJKsc-Regular.otf`），许可为 SIL Open Font License 1.1。完整字库文件不入库。转换器是 `lv_font_conv` 1.5.3。
+
+```text
+lv_font_conv --font NotoSansCJKsc-Regular.otf --range 0x20-0x7E --symbols <fonts/xhs_ui_symbols.txt> --size 16 --bpp 4 --format lvgl --no-compress --no-kerning --lv-font-name xhs_font_16 --lv-include lvgl.h --output assets/fonts/xhs_font_16.c
+```
+
 ## 图片（images）
 
 可复用的源图与生成的显示资产放在 `images/`。

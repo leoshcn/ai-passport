@@ -17,6 +17,17 @@ Store reusable font files and generated font sources in `fonts/`.
 - Check Flash and internal-RAM impact before adding a font; the ESP32-C3 has no PSRAM.
 - Do not commit fonts whose license does not permit redistribution.
 
+| File | Size and format | Use and source |
+| --- | --- | --- |
+| [`fonts/xhs_font_16.c`](fonts/xhs_font_16.c) | 16 px, 4 bpp, uncompressed LVGL 9 font | Dashboard labels and account names. Glyphs are printable ASCII plus the inventory in [`fonts/xhs_ui_symbols.txt`](fonts/xhs_ui_symbols.txt): GB2312 level 1 and the punctuation used by the UI. Compiled from `main/CMakeLists.txt`. A name outside this inventory uses LVGL's built-in Source Han Sans SC 16 CJK fallback; characters missing there stay visible as placeholder boxes. |
+| [`fonts/xhs_ui_symbols.txt`](fonts/xhs_ui_symbols.txt) | UTF-8 character inventory | The non-ASCII set requested from the source font. |
+
+Source font: Noto Sans CJK SC Regular (`NotoSansCJKsc-Regular.otf`), SIL Open Font License 1.1. The full font file is not committed. Converter: `lv_font_conv` 1.5.3.
+
+```text
+lv_font_conv --font NotoSansCJKsc-Regular.otf --range 0x20-0x7E --symbols <fonts/xhs_ui_symbols.txt> --size 16 --bpp 4 --format lvgl --no-compress --no-kerning --lv-font-name xhs_font_16 --lv-include lvgl.h --output assets/fonts/xhs_font_16.c
+```
+
 ## Images
 
 Store reusable source images and generated display assets in `images/`.

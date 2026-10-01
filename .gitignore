@@ -5,6 +5,14 @@ managed_components/
 .vscode/
 .idea/
 
+# Local creator session and device token. Never commit these.
+backend/xhs.cookie
+backend/xhs.cookie.tmp
+backend/device.token
+backend/device.token.tmp
+backend/pairing.json
+backend/__pycache__/
+
 # Generated repository-local links; canonical skill sources live in skills/.
 /.agents/skills/passport-develop
 /.agents/skills/passport-setup
