@@ -44,6 +44,213 @@ LOGIN_LABELS = {
     "expired": "已失效",
 }
 
+_CONSOLE_PAGE = """<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>创作者控制台</title>
+<style>
+:root {
+  --desk: #d5e0ea;
+  --card: #f7fafc;
+  --ink: #1b2836;
+  --muted: #5d6d7e;
+  --line: #d3dee8;
+  --seal: #d61f3c;
+  --seal-ink: #fff7f4;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  background:
+    radial-gradient(28rem 16rem at 110% -10%, rgba(214, 31, 60, 0.18), transparent 70%),
+    var(--desk);
+  font-family: "Avenir Next", "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+main {
+  width: min(28rem, calc(100% - 1.5rem));
+  margin: 2.25rem auto;
+  padding: 1.6rem 1.4rem 1.3rem;
+  background: var(--card);
+  border-radius: 1.2rem;
+  box-shadow: 0 16px 40px rgba(27, 40, 54, 0.08);
+}
+.eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+}
+.top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0.35rem 0 1.1rem;
+}
+h1 {
+  margin: 0;
+  font-family: "Iowan Old Style", Palatino, "Palatino Linotype", "Songti SC", "STSong", "SimSun", serif;
+  font-size: 1.85rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  line-height: 1.15;
+}
+.lede { margin: 0.45rem 0 0; color: var(--muted); font-size: 0.92rem; }
+.seal {
+  flex: none;
+  width: auto;
+  margin: 0.15rem 0.2rem 0 0;
+  padding: 0.48rem 0.42rem 0.38rem;
+  border: 3px solid var(--seal);
+  color: var(--seal);
+  background: transparent;
+  font-family: "Songti SC", "STSong", "SimSun", "Noto Serif SC", serif;
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.12;
+  letter-spacing: 0;
+  text-align: center;
+  word-break: break-all;
+  transform: rotate(-8deg);
+  animation: stamp 420ms ease-out both;
+}
+body[data-login="logged_in"] .seal {
+  background: var(--seal);
+  color: var(--seal-ink);
+}
+body[data-login="expired"] .seal { border-style: dashed; }
+@keyframes stamp {
+  from { transform: rotate(-16deg) scale(1.06); opacity: 0; }
+  to { transform: rotate(-8deg) scale(1); opacity: 1; }
+}
+#notice:empty { display: none; }
+#notice {
+  margin: 0 0 0.9rem;
+  color: var(--seal);
+  font-size: 0.92rem;
+}
+.actions, .pair { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+form { margin: 0; }
+button, summary {
+  font: inherit;
+  cursor: pointer;
+}
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.62rem 1.05rem;
+  background: var(--seal);
+  color: var(--seal-ink);
+}
+button.quiet {
+  background: transparent;
+  color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+button:focus-visible, summary:focus-visible, textarea:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 3px;
+}
+.qr {
+  margin: 1rem 0 0;
+  padding: 0.75rem;
+  background: white;
+  border-radius: 0.9rem;
+  box-shadow: inset 0 0 0 1px var(--line);
+}
+.qr img { display: block; width: min(100%, 18rem); height: auto; margin: 0 auto; }
+.hint, .empty { margin: 0.7rem 0 0; color: var(--muted); font-size: 0.9rem; }
+details { margin-top: 1.15rem; }
+summary { color: var(--ink); }
+textarea {
+  display: block;
+  width: 100%;
+  margin: 0.7rem 0;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 0.7rem;
+  resize: vertical;
+  font: inherit;
+  color: var(--ink);
+  background: white;
+}
+.pairs { margin-top: 1.25rem; padding-top: 1rem; box-shadow: inset 0 1px 0 var(--line); }
+.pairs h2 {
+  margin: 0 0 0.55rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.pair button { font-variant-numeric: tabular-nums; letter-spacing: 0.08em; }
+@media (prefers-reduced-motion: reduce) {
+  .seal { animation: none; }
+}
+</style>
+</head>
+<body data-login="{{LOGIN_KEY}}">
+<main>
+<p class="eyebrow">小红书 · 仅本机</p>
+<div class="top">
+  <div>
+    <h1>创作者控制台</h1>
+    <p class="lede">扫码登录创作者账号。退出后可以换号，设备大约一分钟内会跟上。</p>
+  </div>
+  <p id="state" class="seal" role="status">{{STATE}}</p>
+</div>
+<p id="notice">{{NOTICE}}</p>
+<div class="actions">
+  <form method="post" action="/api/login/start"><button type="submit">扫码登录</button></form>
+  {{LOGOUT}}
+</div>
+{{QR}}
+<details>
+  <summary>Cookie 备用</summary>
+  <form method="post" action="/api/login/paste">
+    <textarea name="cookie" rows="4" cols="48" placeholder="扫码失败时，把浏览器里的 Cookie 粘贴到这里"></textarea>
+    <button class="quiet" type="submit">提交 Cookie</button>
+  </form>
+</details>
+<section class="pairs">
+  <h2>设备配对</h2>
+  {{PAIRS}}
+</section>
+</main>
+<script>
+setInterval(function () {
+  fetch("/api/status").then(function (response) { return response.json(); }).then(function (data) {
+    if (!data) return;
+    var label = data.login === "logged_in" ? "已登录" : (data.login === "expired" ? "已失效" : "未登录");
+    document.body.setAttribute("data-login", data.login || "logged_out");
+    var title = document.getElementById("state");
+    if (title) {
+      title.textContent = "";
+      for (var i = 0; i < label.length; i++) {
+        if (i) title.appendChild(document.createElement("br"));
+        title.appendChild(document.createTextNode(label.charAt(i)));
+      }
+    }
+    var note = document.getElementById("notice");
+    if (note) note.textContent = data.notice || "";
+    var logout = document.getElementById("logout");
+    if (logout) logout.style.display = data.login === "logged_out" ? "none" : "";
+    if (data.login === "logged_in") {
+      var block = document.getElementById("qr-block");
+      if (block && block.parentNode) block.parentNode.removeChild(block);
+    }
+  }).catch(function () {});
+}, 3000);
+</script>
+</body>
+</html>
+"""
+
 
 def data_dir_from_env() -> Path:
     raw = os.environ.get("XHS_DATA_DIR", "").strip()
@@ -226,50 +433,32 @@ class Service:
             for code in pending:
                 safe = _html_escape(str(code))
                 rows.append(
-                    "<form method=\"post\" action=\"/api/pair/confirm\">"
+                    "<form class=\"pair\" method=\"post\" action=\"/api/pair/confirm\">"
                     "<input type=\"hidden\" name=\"code\" value=\"%s\">"
                     "<button type=\"submit\">确认 %s</button></form>" % (safe, safe)
                 )
-        qr = "<p><img alt=\"qr\" src=\"/api/login/qr\"></p>" if self.qr_png() else ""
-        hint = "<p>扫码并在手机上同意后，标题会变成已登录。下面的输入框不会自动填写。</p>" if qr else ""
+        if self.qr_png():
+            qr = (
+                "<div id=\"qr-block\" class=\"qr\">"
+                "<img alt=\"qr\" src=\"/api/login/qr\">"
+                "<p class=\"hint\">在手机上点同意后，红印会变成已登录。Cookie 框不会自动填写。</p>"
+                "</div>"
+            )
+        else:
+            qr = ""
         hidden = "" if login != "logged_out" else " style=\"display:none\""
         logout = (
             "<form id=\"logout\" method=\"post\" action=\"/api/login/logout\"%s>"
-            "<button type=\"submit\">退出登录</button></form>" % hidden
+            "<button class=\"quiet\" type=\"submit\">退出登录</button></form>" % hidden
         )
-        page = """<!DOCTYPE html>
-<meta charset="utf-8">
-<title>Xiaohongshu console</title>
-<h1 id="state">%s</h1>
-<p id="notice">%s</p>
-%s
-%s
-<form method="post" action="/api/login/start"><button type="submit">登录</button></form>
-%s
-<form method="post" action="/api/login/paste">
-<textarea name="cookie" rows="4" cols="48"></textarea>
-<button type="submit">提交 Cookie</button>
-</form>
-%s
-<script>
-setInterval(function () {
-  fetch("/api/status").then(function (response) { return response.json(); }).then(function (data) {
-    var title = document.getElementById("state");
-    if (!title || !data) return;
-    var label = data.login === "logged_in" ? "已登录" : (data.login === "expired" ? "已失效" : "未登录");
-    title.textContent = label;
-    var note = document.getElementById("notice");
-    if (note) note.textContent = data.notice || "";
-    var logout = document.getElementById("logout");
-    if (logout) logout.style.display = data.login === "logged_out" ? "none" : "";
-    if (data.login === "logged_in") {
-      var image = document.querySelector("img[alt=qr]");
-      if (image && image.parentNode) image.parentNode.removeChild(image);
-    }
-  }).catch(function () {});
-}, 3000);
-</script>
-""" % (LOGIN_LABELS[login], _html_escape(self._login_error), hint, qr, logout, "".join(rows))
+        pairs = "".join(rows) if rows else "<p class=\"empty\">设备亮出配对码之后，确认按钮会出现在这里。</p>"
+        page = (_CONSOLE_PAGE
+                .replace("{{LOGIN_KEY}}", login)
+                .replace("{{STATE}}", "<br>".join(LOGIN_LABELS[login]))
+                .replace("{{NOTICE}}", _html_escape(self._login_error))
+                .replace("{{LOGOUT}}", logout)
+                .replace("{{QR}}", qr)
+                .replace("{{PAIRS}}", pairs))
         return page.encode("utf-8")
 
 
