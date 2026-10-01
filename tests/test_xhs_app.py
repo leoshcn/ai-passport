@@ -266,6 +266,18 @@ class PairingAndConsoleTest(unittest.TestCase):
                 (140.0, 420.0, 18.0, 18.0),
             ]
             self.assertEqual(xhs_browser.corner_switch_tip(icons, title), (404.0, 32.0))
+            before = {"web_session": "guest"}
+            self.assertFalse(xhs_browser.login_confirmed(
+                "https://creator.xiaohongshu.com/login", before, dict(before),
+            ))
+            self.assertTrue(xhs_browser.login_confirmed(
+                "https://creator.xiaohongshu.com/login",
+                before,
+                {"web_session": "signed-in"},
+            ))
+            self.assertTrue(xhs_browser.login_confirmed(
+                "https://creator.xiaohongshu.com/new/home", before, dict(before),
+            ))
         finally:
             if original is None:
                 delattr(os, "geteuid")

@@ -144,6 +144,34 @@ def choose_qr_index(boxes: list[tuple[float, float, bool]]) -> int | None:
     return best_index
 
 
+_SESSION_NAMES = (
+    "web_session",
+    "customer-sso-sid",
+    "galaxy_creator_session_id",
+)
+
+
+def session_values(cookies: list) -> dict[str, str]:
+    """Login cookies only. Guest cookies such as webId are ignored."""
+    found: dict[str, str] = {}
+    for item in cookies:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "")
+        if name in _SESSION_NAMES or name.startswith("access-token"):
+            found[name] = str(item.get("value") or "")
+    return found
+
+
+def login_confirmed(url: str, before: dict[str, str], after: dict[str, str]) -> bool:
+    """True after the phone approval changes the session or leaves the login URL."""
+    if url and "creator.xiaohongshu.com" in url and "/login" not in url:
+        return True
+    if not after:
+        return False
+    return after != before
+
+
 def format_cookie_header(cookies: list) -> str | None:
     parts = []
     for item in cookies:
@@ -223,10 +251,24 @@ class PlaywrightLoginBrowser:
             _close_playwright(context, browser, playwright)
             return
         self._ready.set()
-        while not self._stop.wait(1):
-            header = format_cookie_header(_safe_cookies(context))
+        baseline = session_values(_safe_cookies(context))
+        while not self._stop.is_set():
+            try:
+                page.wait_for_timeout(1000)
+            except Exception:
+                break
+            cookies = _safe_cookies(context)
+            url = ""
+            try:
+                url = str(page.url or "")
+            except Exception:
+                url = ""
+            if not login_confirmed(url, baseline, session_values(cookies)):
+                continue
+            header = format_cookie_header(cookies)
             with self._lock:
                 self._cookie = header
+            print("login session seen")
         _close_playwright(context, browser, playwright)
 
 

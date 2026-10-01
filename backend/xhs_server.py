@@ -190,12 +190,15 @@ class Service:
                 continue
             status = self.state.accept_cookie(raw)
             print("login %s" % status)
-            if status == "logged_in":
-                browser.close()
-                with self._browser_lock:
-                    if self._browser is browser:
-                        self._browser = None
-                return
+            if status != "logged_in":
+                self._login_error = "手机已确认，账号数据还没读到"
+                continue
+            self._login_error = ""
+            browser.close()
+            with self._browser_lock:
+                if self._browser is browser:
+                    self._browser = None
+            return
 
     def console_page(self) -> bytes:
         payload = self.state.status_payload()
@@ -213,11 +216,15 @@ class Service:
                     "<button type=\"submit\">确认 %s</button></form>" % (safe, safe)
                 )
         qr = "<p><img alt=\"qr\" src=\"/api/login/qr\"></p>" if self.qr_png() else ""
+        refresh = '<meta http-equiv="refresh" content="2">' if qr else ""
+        hint = "<p>在手机上点同意后，此页会自动更新。</p>" if qr else ""
         notice = "<p>%s</p>" % _html_escape(self._login_error) if self._login_error else ""
         page = """<!DOCTYPE html>
 <meta charset="utf-8">
+%s
 <title>Xiaohongshu console</title>
 <h1>%s</h1>
+%s
 %s
 %s
 <form method="post" action="/api/login/start"><button type="submit">登录</button></form>
@@ -226,7 +233,7 @@ class Service:
 <button type="submit">提交 Cookie</button>
 </form>
 %s
-""" % (LOGIN_LABELS[login], notice, qr, "".join(rows))
+""" % (refresh, LOGIN_LABELS[login], notice, hint, qr, "".join(rows))
         return page.encode("utf-8")
 
 
