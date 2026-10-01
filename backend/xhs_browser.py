@@ -77,6 +77,35 @@ def chromium_launch_kwargs() -> dict[str, object]:
     }
 
 
+def corner_switch_tip(
+    icons: list[tuple[float, float, float, float]],
+    title: tuple[float, float, float, float],
+) -> tuple[float, float] | None:
+    """Tip of the pink corner control above the SMS heading.
+
+    The painted triangle sits in the top-right of its box. The center of that
+    box is empty card, so a click there does not switch the form.
+    """
+    title_x, title_y, _title_w, _title_h = title
+    best: tuple[float, float, float, float] | None = None
+    best_right = -1.0
+    for left, top, width, height in icons:
+        if width < 24 or height < 24 or width > 220 or height > 220:
+            continue
+        if left < title_x:
+            continue
+        if top + height > title_y + 80:
+            continue
+        right = left + width
+        if right >= best_right:
+            best_right = right
+            best = (left, top, width, height)
+    if best is None:
+        return None
+    left, top, width, _height = best
+    return (left + width - 8, top + 8)
+
+
 def login_card_switch_point(x: float, y: float, width: float, height: float) -> tuple[float, float]:
     """Click point for the corner control on the SMS login card.
 
@@ -210,20 +239,22 @@ def _safe_cookies(context: object) -> list:
 
 
 def _capture_qr(page: object) -> bytes | None:
-    """Switch the SMS card to its QR, then return that image.
+    """Open the QR side of the login card and return that image.
 
-    A missing image used to leave the console blank. If the square code cannot
-    be isolated, return the login card itself.
+    While the SMS heading is still visible, the card screenshot is the form
+    the operator already saw, so it is not returned.
     """
-    clicked = False
+    clicks = 0
     deadline = time.monotonic() + 12
     while True:
-        shot = _screenshot_qr(page)
-        if shot is not None:
-            print("login qr image")
-            return shot
-        if not clicked:
-            clicked = _click_scan_tab(page)
+        if not _sms_heading_visible(page):
+            shot = _screenshot_qr(page) or _screenshot_login_card(page)
+            if shot is not None:
+                print("login qr image")
+                return shot
+        elif clicks < 3:
+            clicks += 1
+            clicked = _click_corner_icon(page)
             print("login switch %s" % ("clicked" if clicked else "missed"))
         if time.monotonic() >= deadline:
             break
@@ -231,10 +262,6 @@ def _capture_qr(page: object) -> bytes | None:
             page.wait_for_timeout(500)  # type: ignore[attr-defined]
         except Exception:
             break
-    card = _screenshot_login_card(page)
-    if card is not None:
-        print("login card shot")
-        return card
     print("login qr missing")
     return None
 
@@ -266,6 +293,72 @@ def _screenshot_qr(page: object) -> bytes | None:
         return items[chosen].screenshot(type="png")
     except Exception:
         return None
+
+
+_LAYOUT_SCRIPT = """() => {
+    const titleEl = [...document.querySelectorAll("body *")].find((el) => {
+        const own = [...el.childNodes]
+            .filter((node) => node.nodeType === 3)
+            .map((node) => node.textContent || "")
+            .join("")
+            .trim();
+        return own === "短信登录";
+    });
+    const title = titleEl ? titleEl.getBoundingClientRect() : null;
+    const icons = [...document.querySelectorAll("img, svg")].map((el) => {
+        const rect = el.getBoundingClientRect();
+        return {x: rect.x, y: rect.y, width: rect.width, height: rect.height};
+    });
+    return {
+        title: title ? {x: title.x, y: title.y, width: title.width, height: title.height} : null,
+        icons,
+    };
+}"""
+
+
+def _sms_heading_visible(page: object) -> bool:
+    try:
+        title = page.get_by_text("短信登录", exact=True)  # type: ignore[attr-defined]
+        return title.count() > 0 and bool(title.first.is_visible())
+    except Exception:
+        return False
+
+
+def _click_corner_icon(page: object) -> bool:
+    try:
+        layout = page.evaluate(_LAYOUT_SCRIPT)  # type: ignore[attr-defined]
+    except Exception:
+        layout = None
+    point = None
+    if isinstance(layout, dict) and isinstance(layout.get("title"), dict):
+        title = layout["title"]
+        icons = []
+        for item in layout.get("icons") or []:
+            if not isinstance(item, dict):
+                continue
+            icons.append((
+                float(item.get("x", 0)), float(item.get("y", 0)),
+                float(item.get("width", 0)), float(item.get("height", 0)),
+            ))
+        point = corner_switch_tip(
+            icons,
+            (float(title["x"]), float(title["y"]), float(title["width"]), float(title["height"])),
+        )
+    if point is None:
+        try:
+            image = page.locator("img").first  # type: ignore[attr-defined]
+            box = image.bounding_box()
+        except Exception:
+            box = None
+        if box:
+            point = (float(box["x"]) + float(box["width"]) - 8, float(box["y"]) + 8)
+    if point is None:
+        return _click_scan_tab(page)
+    try:
+        page.mouse.click(point[0], point[1])  # type: ignore[attr-defined]
+        return True
+    except Exception:
+        return False
 
 
 def _click_scan_tab(page: object) -> bool:
