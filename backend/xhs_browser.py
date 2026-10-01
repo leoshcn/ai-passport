@@ -184,6 +184,8 @@ class PlaywrightLoginBrowser:
             page = context.new_page()
             page.goto(CREATOR_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
             qr = _capture_qr(page)
+            if not qr:
+                raise RuntimeError("qr missing")
             with self._lock:
                 self._qr = qr
         except Exception as exc:
@@ -208,21 +210,32 @@ def _safe_cookies(context: object) -> list:
 
 
 def _capture_qr(page: object) -> bytes | None:
-    """Wait until the square QR is on screen. Never return the corner graphic."""
+    """Switch the SMS card to its QR, then return that image.
+
+    A missing image used to leave the console blank. If the square code cannot
+    be isolated, return the login card itself.
+    """
     clicked = False
-    deadline = time.monotonic() + 8
+    deadline = time.monotonic() + 12
     while True:
         shot = _screenshot_qr(page)
         if shot is not None:
+            print("login qr image")
             return shot
         if not clicked:
             clicked = _click_scan_tab(page)
+            print("login switch %s" % ("clicked" if clicked else "missed"))
         if time.monotonic() >= deadline:
             break
         try:
-            page.wait_for_timeout(400)  # type: ignore[attr-defined]
+            page.wait_for_timeout(500)  # type: ignore[attr-defined]
         except Exception:
             break
+    card = _screenshot_login_card(page)
+    if card is not None:
+        print("login card shot")
+        return card
+    print("login qr missing")
     return None
 
 
@@ -272,27 +285,56 @@ def _click_text(page: object, text: str) -> bool:
         return False
 
 
+_CARD_SCRIPT = """(el) => {
+    const limit = window.innerWidth * 0.85;
+    let node = el;
+    let card = null;
+    while (node && node !== document.body) {
+        const rect = node.getBoundingClientRect();
+        if (rect.width >= 220 && rect.height >= 220 && rect.width < limit) {
+            card = node;
+            break;
+        }
+        node = node.parentElement;
+    }
+    if (!card) {
+        card = document.querySelector(".login-box-container");
+    }
+    if (!card) return null;
+    const rect = card.getBoundingClientRect();
+    let icon = null;
+    let iconX = -1;
+    for (const item of card.querySelectorAll("img, svg")) {
+        const box = item.getBoundingClientRect();
+        if (box.width < 20 || box.width > 120 || box.height < 20 || box.height > 120) continue;
+        if (box.x >= iconX) {
+            iconX = box.x;
+            icon = item;
+        }
+    }
+    if (icon) {
+        const box = icon.getBoundingClientRect();
+        return {x: box.x + box.width / 2, y: box.y + box.height / 2, clicked: "icon"};
+    }
+    return {x: rect.x, y: rect.y, width: rect.width, height: rect.height, clicked: "point"};
+}"""
+
+
 def _click_login_card_corner(page: object) -> bool:
     try:
-        title = page.get_by_text("短信登录", exact=True)  # type: ignore[attr-defined]
+        title = page.get_by_text("短信登录", exact=False)  # type: ignore[attr-defined]
         if title.count() < 1:
-            return False
-        point = title.first.evaluate(
-            """(el) => {
-                let node = el;
-                for (let i = 0; i < 8 && node; i++) {
-                    const rect = node.getBoundingClientRect();
-                    if (rect.width >= 240 && rect.width <= 560 &&
-                        rect.height >= 260 && rect.height <= 700) {
-                        return {x: rect.x, y: rect.y, width: rect.width, height: rect.height};
-                    }
-                    node = node.parentElement;
-                }
-                return null;
-            }"""
-        )
+            box = page.locator(".login-box-container")  # type: ignore[attr-defined]
+            if box.count() < 1:
+                return False
+            point = box.first.evaluate(_CARD_SCRIPT)
+        else:
+            point = title.first.evaluate(_CARD_SCRIPT)
         if not isinstance(point, dict):
             return False
+        if point.get("clicked") == "icon":
+            page.mouse.click(float(point["x"]), float(point["y"]))  # type: ignore[attr-defined]
+            return True
         x, y = login_card_switch_point(
             float(point["x"]), float(point["y"]),
             float(point["width"]), float(point["height"]),
@@ -301,6 +343,20 @@ def _click_login_card_corner(page: object) -> bool:
         return True
     except Exception:
         return False
+
+
+def _screenshot_login_card(page: object) -> bytes | None:
+    try:
+        box = page.locator(".login-box-container")  # type: ignore[attr-defined]
+        if box.count() > 0:
+            return box.first.screenshot(type="png")
+        title = page.get_by_text("短信登录", exact=False)  # type: ignore[attr-defined]
+        if title.count() < 1:
+            return None
+        card = title.first.locator("xpath=ancestor::*[self::div][position()<=6]").last
+        return card.screenshot(type="png")
+    except Exception:
+        return None
 
 
 def _close_playwright(context: object, browser: object, playwright: object) -> None:
