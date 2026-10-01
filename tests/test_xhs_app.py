@@ -496,9 +496,9 @@ class PairingAndConsoleTest(unittest.TestCase):
 
     def test_compose_launcher_and_empty_firmware_template(self) -> None:
         compose = (ROOT / "docker-compose.yml").read_text(encoding="utf-8")
-        self.assertIn("host_ip: 0.0.0.0", compose)
+        self.assertEqual(compose.count("host_ip: 0.0.0.0"), 2)
         self.assertIn("published: 8787", compose)
-        self.assertIn("host_ip: 127.0.0.1", compose)
+        self.assertNotIn("host_ip: 127.0.0.1", compose)
         self.assertIn("published: 8790", compose)
         self.assertNotIn("network_mode: host", compose)
         self.assertIn("xhs-data:/data", compose)

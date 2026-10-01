@@ -1,8 +1,8 @@
 """Device API and the loopback operator console.
 
-The device API listens on 0.0.0.0:8787. The console listens on 127.0.0.1:8790
-unless Docker publishes that port only on the host loopback and sets
-XHS_CONSOLE_HOST=0.0.0.0 inside the container network namespace.
+The device API listens on 0.0.0.0:8787. A direct run keeps the console on
+127.0.0.1:8790. Docker Compose publishes the console on the host LAN as well,
+so a browser on another computer can open http://<server-lan-ip>:8790.
 
 Responses other than the device pairing delivery do not contain the cookie or
 the device token. Logs record status names and HTTP results, not secrets.
@@ -196,7 +196,7 @@ textarea {
 </head>
 <body data-login="{{LOGIN_KEY}}">
 <main>
-<p class="eyebrow">小红书 · 仅本机</p>
+<p class="eyebrow">小红书 · 局域网</p>
 <div class="top">
   <div>
     <h1>创作者控制台</h1>

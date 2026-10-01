@@ -1,5 +1,5 @@
 # Starts the Windows discovery listener, then docker compose.
-# The device API is published on 0.0.0.0:8787. The console is published on 127.0.0.1:8790.
+# The device API is published on 0.0.0.0:8787. The console is published on 0.0.0.0:8790.
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
