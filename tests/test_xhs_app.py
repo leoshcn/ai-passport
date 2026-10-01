@@ -254,6 +254,53 @@ class PairingAndConsoleTest(unittest.TestCase):
         self.assertEqual(denied, 503)
         self.assertNotIn(GOOD_COOKIE.encode("utf-8"), body)
 
+    def test_session_revision_changes_when_the_account_changes(self) -> None:
+        from xhs_state import session_revision
+
+        code = "AB3K"
+        self._request(self.api_url + "/api/v1/pair?code=" + code)
+        self._request(
+            self.console_url + "/api/pair/confirm",
+            data=json.dumps({"code": code}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        token = self.state.read_token()
+        status, body = self._request(
+            self.api_url + "/api/v1/session",
+            headers={"X-Device-Token": token},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["revision"], "")
+        self.assertNotIn(GOOD_COOKIE.encode("utf-8"), body)
+        self.state.accept_cookie(GOOD_COOKIE)
+        status, body = self._request(
+            self.api_url + "/api/v1/session",
+            headers={"X-Device-Token": token},
+        )
+        first = json.loads(body)["revision"]
+        self.assertEqual(first, session_revision(GOOD_COOKIE))
+        self.assertNotIn(GOOD_COOKIE.encode("utf-8"), body)
+        other = "cookie-other-value"
+
+        def fetch_other(cookie: str, when: datetime | None = None):
+            if cookie == other:
+                return fake_fetch(GOOD_COOKIE)
+            return fake_fetch(cookie, when)
+
+        self.state._fetch = fetch_other
+        self.state.clear_login()
+        self.assertEqual(self.state.accept_cookie(other), "logged_in")
+        status, body = self._request(
+            self.api_url + "/api/v1/session",
+            headers={"X-Device-Token": token},
+        )
+        second = json.loads(body)["revision"]
+        self.assertNotEqual(second, first)
+        self.assertEqual(second, session_revision(other))
+        self.assertNotIn(other.encode("utf-8"), body)
+        denied, _body = self._request(self.api_url + "/api/v1/session")
+        self.assertEqual(denied, 401)
+
     def test_qr_login_uses_the_fake_browser(self) -> None:
         self.assertNotIn("playwright", sys.modules)
         status, _body = self._request(self.console_url + "/api/login/start", data=b"")

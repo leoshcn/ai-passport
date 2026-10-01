@@ -45,6 +45,8 @@ static xhs_schedule_t s_sched;
 static bool s_fetch_now;
 static bool s_sched_changed;
 static volatile bool s_reprovision;
+static volatile int s_portal_state;
+static TickType_t s_ap_hold_until;
 static bool s_form_ready;
 static xhs_setup_form_t s_form;
 
@@ -120,10 +122,13 @@ static void on_disconnect(void *arg, esp_event_base_t base, int32_t id, void *da
     (void)arg;
     (void)base;
     (void)id;
-    (void)data;
+    uint8_t reason = 0;
+    if (data) reason = ((const wifi_event_sta_disconnected_t *)data)->reason;
+    ESP_LOGI(TAG, "sta disconnect %u", (unsigned)reason);
     s_got_ip = false;
     if (s_join_watch) {
-        s_sta_fail = true;
+        if (xhs_sta_disconnect_is_final(reason)) s_sta_fail = true;
+        else esp_wifi_connect();
         return;
     }
     if (s_sta_reconnect) esp_wifi_connect();
@@ -325,10 +330,39 @@ static void dns_stop(void)
     for (int i = 0; i < 20 && s_dns_task; i++) vTaskDelay(pdMS_TO_TICKS(100));
 }
 
-static esp_err_t portal_get(httpd_req_t *req)
+static esp_err_t send_html(httpd_req_t *req, const char *page)
 {
     httpd_resp_set_type(req, "text/html; charset=utf-8");
-    return httpd_resp_send(req, PORTAL_PAGE, sizeof(PORTAL_PAGE) - 1);
+    return httpd_resp_sendstr(req, page);
+}
+
+static esp_err_t status_get(httpd_req_t *req)
+{
+    int state = s_portal_state;
+    if (state == 3) {
+        return send_html(req,
+            "<!DOCTYPE html><meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+            "<p>已连上家里的 Wi-Fi。请断开本热点，看设备屏幕上的配对码。</p>");
+    }
+    if (state == 2) {
+        return send_html(req,
+            "<!DOCTYPE html><meta charset=\"utf-8\">"
+            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+            "<p>没连上。请检查名称和密码后再试。</p>"
+            "<p><a href=\"/\">返回</a></p>");
+    }
+    return send_html(req,
+        "<!DOCTYPE html><meta charset=\"utf-8\">"
+        "<meta http-equiv=\"refresh\" content=\"2;url=/status\">"
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+        "<p>正在连接</p>");
+}
+
+static esp_err_t portal_get(httpd_req_t *req)
+{
+    if (strncmp(req->uri, "/status", 7) == 0) return status_get(req);
+    return send_html(req, PORTAL_PAGE);
 }
 
 static esp_err_t setup_post(httpd_req_t *req)
@@ -371,10 +405,12 @@ static esp_err_t setup_post(httpd_req_t *req)
     s_form_ready = true;
     taskEXIT_CRITICAL(&s_mux);
     memset(&form, 0, sizeof(form));
+    s_portal_state = 1;
     if (s_task) xTaskNotifyGive(s_task);
-    httpd_resp_set_type(req, "text/html; charset=utf-8");
-    httpd_resp_sendstr(req, "<!DOCTYPE html><meta charset=\"utf-8\"><p>正在连接</p>");
-    return ESP_OK;
+    return send_html(req,
+        "<!DOCTYPE html><meta charset=\"utf-8\">"
+        "<meta http-equiv=\"refresh\" content=\"2;url=/status\">"
+        "<p>正在连接</p>");
 }
 
 static esp_err_t http_start(void)
@@ -582,6 +618,24 @@ done:
     return ok;
 }
 
+static xhs_session_seen_t s_session_seen;
+static TickType_t s_next_session;
+static bool s_fetch_aligned;
+
+static bool creator_session_changed(bool align_saved)
+{
+    char url[XHS_URL_CAP];
+    char revision[XHS_SESSION_REV_CAP];
+    uint8_t body[96];
+    size_t used = 0;
+    if (!xhs_join_url(s_prov.saved.base_url, "/api/v1/session", url, sizeof(url))) return false;
+    if (!http_get(url, s_prov.saved.token, body, sizeof(body), &used, true)) return false;
+    bool parsed = xhs_parse_session_revision((char *)body, revision, sizeof(revision));
+    memset(body, 0, sizeof(body));
+    if (!parsed) return false;
+    return xhs_note_session_revision(&s_session_seen, revision, align_saved);
+}
+
 static bool fetch_once(void)
 {
     char stats_url[XHS_URL_CAP];
@@ -611,6 +665,7 @@ static bool fetch_once(void)
     }
     s_outgoing.ok = true;
     s_outgoing.kind = XHS_RESULT_FETCH;
+    s_fetch_aligned = true;
     publish(&s_outgoing);
     taskENTER_CRITICAL(&s_mux);
     s_sched.last_unix = s_outgoing.stats.fetched_unix;
@@ -728,6 +783,7 @@ static void finish_join(bool ok)
     s_join_watch = false;
     if (!ok) {
         s_sta_reconnect = false;
+        s_portal_state = 2;
         xhs_prov_join_failed(&s_prov);
         if (s_wifi_started) esp_wifi_disconnect();
         ESP_LOGI(TAG, "provision join failed");
@@ -737,7 +793,8 @@ static void finish_join(bool ok)
     s_sta_reconnect = true;
     xhs_prov_join_ok(&s_prov);
     persist_edges();
-    provision_services_stop();
+    s_portal_state = 3;
+    s_ap_hold_until = xTaskGetTickCount() + pdMS_TO_TICKS(15000);
     if (s_prov.phase == XHS_PROV_PAIR && s_prov.pair_code[0] == '\0') {
         xhs_pair_code_from_seed(s_prov.pair_code, esp_random());
     }
@@ -814,6 +871,10 @@ static void net_task(void *arg)
         handle_reprovision();
         handle_form();
         handle_join();
+        if (s_ap_services && s_portal_state == 3 &&
+            (int32_t)(xTaskGetTickCount() - s_ap_hold_until) >= 0) {
+            provision_services_stop();
+        }
 
         if (s_prov.phase == XHS_PROV_AP && !s_ap_services) {
             static TickType_t retry_at;
@@ -875,6 +936,11 @@ static void net_task(void *arg)
             }
         }
 
+        if (!due && s_got_ip && (int32_t)(now_tick - s_next_session) >= 0) {
+            s_next_session = now_tick + pdMS_TO_TICKS(XHS_SESSION_POLL_SEC * 1000);
+            if (creator_session_changed(sched.has_last && !s_fetch_aligned)) due = true;
+        }
+
         if (due) {
             bool fetched = false;
             if (s_wifi_started) {
@@ -903,6 +969,10 @@ static void net_task(void *arg)
         }
 
         if (!manual && !holding && !sched.auto_update) wait = portMAX_DELAY;
+        {
+            const TickType_t session_slice = pdMS_TO_TICKS(XHS_SESSION_POLL_SEC * 1000);
+            if (wait > session_slice) wait = session_slice;
+        }
         (void)ulTaskNotifyTake(pdTRUE, wait);
     }
 }

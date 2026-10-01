@@ -14,6 +14,9 @@
 #define XHS_AVATAR_BYTES (XHS_AVATAR_W * XHS_AVATAR_H * 2)
 /* 拉取失败后的重试间隔。比正常的每小时/每天更短，避免一次断网就空等一整天。 */
 #define XHS_FETCH_RETRY_SEC 60
+/* 账号是否换成了另一个创作者。不拉统计，只比对后端给出的修订号。 */
+#define XHS_SESSION_POLL_SEC 60
+#define XHS_SESSION_REV_CAP 17
 
 typedef enum {
     XHS_PERIOD_HOUR = 0,
@@ -152,6 +155,9 @@ void xhs_prov_init(xhs_prov_t *prov, const xhs_net_cfg_t *saved, uint32_t code_s
 bool xhs_prov_submit(xhs_prov_t *prov, const xhs_setup_form_t *form);
 void xhs_prov_join_failed(xhs_prov_t *prov);
 void xhs_prov_join_ok(xhs_prov_t *prov);
+
+/* 认证失败就停止。扫描落空或链路闪断要继续试，直到调用方的截止时间。 */
+bool xhs_sta_disconnect_is_final(unsigned reason);
 bool xhs_prov_apply_reply(xhs_prov_t *prov, const xhs_pair_reply_t *reply);
 void xhs_prov_reconfigure(xhs_prov_t *prov);
 
@@ -166,6 +172,22 @@ int64_t xhs_period_seconds(xhs_period_t period);
 int64_t xhs_seconds_until_due(bool auto_update, xhs_period_t period,
                               int64_t now_unix, bool time_valid,
                               int64_t last_unix, bool has_last);
+
+typedef struct {
+    char value[XHS_SESSION_REV_CAP];
+    bool known;
+} xhs_session_seen_t;
+
+/* 读出修订号。空字符串表示当前没有登录。失败时不改 out。 */
+bool xhs_parse_session_revision(const char *json, char *out, size_t out_len);
+
+/*
+ * 记住修订号。换成另一个非空修订号时返回 true，调用方应立刻拉统计。
+ * 第一次见到修订号时，只有 align_saved 为真才返回 true：设备上已有一份统计，
+ * 但还不知道它属于哪个账号。退出登录（空修订号）不拉，只把空号记住。
+ */
+bool xhs_note_session_revision(xhs_session_seen_t *seen, const char *revision,
+                               bool align_saved);
 
 /* 只接受本应用后端的扁平 JSON。失败时不改 out。 */
 bool xhs_parse_stats(const char *json, xhs_stats_t *out);

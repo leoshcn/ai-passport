@@ -24,7 +24,7 @@ from typing import Callable
 
 from xhs_browser import LoginBrowser, PlaywrightLoginBrowser
 from xhs_fetch import AVATAR_EDGE, fetch_stats, pack_rgb565, token_matches
-from xhs_state import XhsState, pair_code_ok
+from xhs_state import XhsState, pair_code_ok, session_revision
 
 ROOT = Path(__file__).resolve().parent
 API_HOST = "0.0.0.0"
@@ -355,6 +355,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json(401, {"ok": False})
             return
         service.state.note_token_used()
+        if route == "/api/v1/session":
+            self._json(200, {"revision": session_revision(service.state.read_cookie())})
+            return
         if route == "/api/v1/stats":
             stats, _avatar, error = load_snapshot(service.state)
             if error or stats is None:

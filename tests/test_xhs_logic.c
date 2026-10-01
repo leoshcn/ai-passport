@@ -73,6 +73,24 @@ static void test_schedule(void)
     assert(xhs_seconds_until_due(true, XHS_PERIOD_HOUR, 2000, true, 1000, true) == 2600);
     assert(xhs_seconds_until_due(true, XHS_PERIOD_DAY, 90000, true, 1000, true) == 0);
     assert(xhs_seconds_until_due(true, XHS_PERIOD_HOUR, 500, true, 1000, true) == 0);
+
+    xhs_session_seen_t seen;
+    memset(&seen, 0, sizeof(seen));
+    char revision[XHS_SESSION_REV_CAP];
+    assert(xhs_parse_session_revision("{\"revision\":\"0123456789abcdef\"}", revision, sizeof(revision)));
+    assert(strcmp(revision, "0123456789abcdef") == 0);
+    assert(xhs_parse_session_revision("{\"revision\":\"\"}", revision, sizeof(revision)));
+    assert(revision[0] == '\0');
+    assert(!xhs_parse_session_revision("{\"revision\":\"nope\"}", revision, sizeof(revision)));
+    assert(!xhs_note_session_revision(&seen, "0123456789abcdef", false));
+    assert(!xhs_note_session_revision(&seen, "0123456789abcdef", true));
+    assert(xhs_note_session_revision(&seen, "fedcba9876543210", false));
+    assert(!xhs_note_session_revision(&seen, "", false));
+    assert(xhs_note_session_revision(&seen, "0123456789abcdef", false));
+    xhs_session_seen_t fresh;
+    memset(&fresh, 0, sizeof(fresh));
+    assert(xhs_note_session_revision(&fresh, "0123456789abcdef", true));
+    assert(!xhs_note_session_revision(NULL, "0123456789abcdef", true));
 }
 
 static void test_buttons(void)
@@ -230,6 +248,11 @@ static void test_provision(void)
     assert(xhs_prov_submit(&prov, &bad));
     assert(prov.phase == XHS_PROV_JOINING);
     assert(strcmp(prov.saved.password, "old-pass") == 0);
+    assert(xhs_sta_disconnect_is_final(15));
+    assert(xhs_sta_disconnect_is_final(202));
+    assert(xhs_sta_disconnect_is_final(204));
+    assert(!xhs_sta_disconnect_is_final(8));
+    assert(!xhs_sta_disconnect_is_final(201));
     xhs_prov_join_failed(&prov);
     assert(prov.phase == XHS_PROV_AP);
     assert(strcmp(prov.saved.ssid, "old") == 0);

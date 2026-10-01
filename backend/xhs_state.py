@@ -7,6 +7,7 @@ confirmed device and is not placed in console status payloads.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import secrets
@@ -19,6 +20,14 @@ from xhs_fetch import normalize_cookie
 
 PAIR_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 LOGIN_STATES = ("logged_out", "logged_in", "expired")
+
+
+def session_revision(cookie: str) -> str:
+    """Short account stamp. Empty when logged out. Not the cookie."""
+    text = normalize_cookie(cookie or "")
+    if not text:
+        return ""
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:16]
 
 
 def pair_code_ok(code: str | None) -> bool:

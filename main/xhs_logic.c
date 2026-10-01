@@ -379,6 +379,42 @@ static bool decode_string(const char *value, char *dst, size_t dst_len)
     return true;
 }
 
+static bool session_revision_ok(const char *revision)
+{
+    if (!revision) return false;
+    size_t n = strlen(revision);
+    if (n == 0) return true;
+    if (n + 1 != XHS_SESSION_REV_CAP) return false;
+    for (size_t i = 0; i < n; i++) {
+        char c = revision[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) return false;
+    }
+    return true;
+}
+
+bool xhs_parse_session_revision(const char *json, char *out, size_t out_len)
+{
+    if (!json || !out || out_len < XHS_SESSION_REV_CAP) return false;
+    const char *value = find_value(json, "revision");
+    char parsed[XHS_SESSION_REV_CAP];
+    if (!value || !decode_string(value, parsed, sizeof(parsed))) return false;
+    if (!session_revision_ok(parsed)) return false;
+    memcpy(out, parsed, strlen(parsed) + 1);
+    return true;
+}
+
+bool xhs_note_session_revision(xhs_session_seen_t *seen, const char *revision,
+                               bool align_saved)
+{
+    if (!seen || !session_revision_ok(revision)) return false;
+    bool fetch = false;
+    if (!seen->known) fetch = align_saved && revision[0] != '\0';
+    else if (strcmp(seen->value, revision) != 0 && revision[0] != '\0') fetch = true;
+    seen->known = true;
+    memcpy(seen->value, revision, strlen(revision) + 1);
+    return fetch;
+}
+
 static bool parse_i64(const char *value, int64_t *out)
 {
     if (*value != '-' && (*value < '0' || *value > '9')) return false;
@@ -637,6 +673,12 @@ bool xhs_prov_submit(xhs_prov_t *prov, const xhs_setup_form_t *form)
     prov->has_attempt = true;
     prov->phase = XHS_PROV_JOINING;
     return true;
+}
+
+bool xhs_sta_disconnect_is_final(unsigned reason)
+{
+    /* 与 esp_wifi_types.h 一致：四次握手超时、认证失败、握手超时。 */
+    return reason == 15 || reason == 202 || reason == 204;
 }
 
 void xhs_prov_join_failed(xhs_prov_t *prov)
