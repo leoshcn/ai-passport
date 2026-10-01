@@ -135,6 +135,7 @@ class Service:
         self._poll_seconds = poll_seconds
         self._browser: LoginBrowser | None = None
         self._qr: bytes | None = None
+        self._login_error = ""
         self._watch: threading.Thread | None = None
         self._watch_stop = threading.Event()
         self._browser_lock = threading.Lock()
@@ -145,17 +146,19 @@ class Service:
         try:
             browser = self._browser_factory()
             browser.open_login()
-        except Exception:
-            print("login browser failed")
+        except Exception as exc:
+            print("login browser failed: %s" % type(exc).__name__)
             if browser is not None:
                 try:
                     browser.close()
                 except Exception:
                     pass
+            self._login_error = "登录页没有打开"
             return
         with self._browser_lock:
             self._browser = browser
             self._qr = browser.qr_png()
+            self._login_error = ""
         self._watch_stop = threading.Event()
         self._watch = threading.Thread(target=self._watch_login, name="xhs-login", daemon=True)
         self._watch.start()
@@ -210,10 +213,12 @@ class Service:
                     "<button type=\"submit\">确认 %s</button></form>" % (safe, safe)
                 )
         qr = "<p><img alt=\"qr\" src=\"/api/login/qr\"></p>" if self.qr_png() else ""
+        notice = "<p>%s</p>" % _html_escape(self._login_error) if self._login_error else ""
         page = """<!DOCTYPE html>
 <meta charset="utf-8">
 <title>Xiaohongshu console</title>
 <h1>%s</h1>
+%s
 %s
 <form method="post" action="/api/login/start"><button type="submit">登录</button></form>
 <form method="post" action="/api/login/paste">
@@ -221,7 +226,7 @@ class Service:
 <button type="submit">提交 Cookie</button>
 </form>
 %s
-""" % (LOGIN_LABELS[login], qr, "".join(rows))
+""" % (LOGIN_LABELS[login], notice, qr, "".join(rows))
         return page.encode("utf-8")
 
 

@@ -7,6 +7,7 @@ or forge a signature. Tests supply FakeLoginBrowser and never start Chromium.
 
 from __future__ import annotations
 
+import os
 from typing import Protocol
 
 CREATOR_LOGIN_URL = "https://creator.xiaohongshu.com/login"
@@ -53,6 +54,14 @@ class FakeLoginBrowser:
         self.closed = True
 
 
+def chromium_launch_args() -> list[str]:
+    """Chromium refuses to start as root inside Docker unless the sandbox is off."""
+    euid = getattr(os, "geteuid", lambda: -1)()
+    if euid == 0:
+        return ["--no-sandbox", "--disable-dev-shm-usage"]
+    return []
+
+
 class PlaywrightLoginBrowser:
     """Headless Chromium via Playwright. Imported only when a session starts."""
 
@@ -67,7 +76,10 @@ class PlaywrightLoginBrowser:
         from playwright.sync_api import sync_playwright
 
         self._playwright = sync_playwright().start()
-        self._browser = self._playwright.chromium.launch(headless=True)
+        self._browser = self._playwright.chromium.launch(
+            headless=True,
+            args=chromium_launch_args(),
+        )
         self._context = self._browser.new_context()
         self._page = self._context.new_page()
         self._page.goto(CREATOR_LOGIN_URL, wait_until="domcontentloaded", timeout=30000)

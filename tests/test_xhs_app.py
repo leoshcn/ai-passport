@@ -227,6 +227,34 @@ class PairingAndConsoleTest(unittest.TestCase):
         self.assertNotIn(GOOD_COOKIE.encode("utf-8"), page)
         self.assertNotIn(b"playwright", page)
 
+    def test_login_failure_is_shown_on_the_page(self) -> None:
+        class Broken:
+            def open_login(self) -> None:
+                raise RuntimeError("sandbox")
+
+            def close(self) -> None:
+                return None
+
+        self.service._browser_factory = lambda: Broken()
+        status, page = self._request(self.console_url + "/api/login/start", data=b"")
+        self.assertEqual(status, 200)
+        self.assertIn("登录页没有打开".encode("utf-8"), page)
+
+    def test_root_chromium_disables_the_sandbox(self) -> None:
+        import xhs_browser
+
+        original = getattr(os, "geteuid", None)
+        try:
+            os.geteuid = lambda: 0  # type: ignore[attr-defined]
+            self.assertIn("--no-sandbox", xhs_browser.chromium_launch_args())
+            os.geteuid = lambda: 1000  # type: ignore[attr-defined]
+            self.assertEqual(xhs_browser.chromium_launch_args(), [])
+        finally:
+            if original is None:
+                delattr(os, "geteuid")
+            else:
+                os.geteuid = original  # type: ignore[attr-defined]
+
     def test_pair_confirm_delivers_token_only_on_the_device_channel(self) -> None:
         code = "AB3K"
         status, body = self._request(self.api_url + "/api/v1/pair?code=" + code)
