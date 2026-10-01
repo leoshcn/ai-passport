@@ -247,8 +247,10 @@ class PairingAndConsoleTest(unittest.TestCase):
         try:
             os.geteuid = lambda: 0  # type: ignore[attr-defined]
             self.assertIn("--no-sandbox", xhs_browser.chromium_launch_args())
+            self.assertEqual(xhs_browser.chromium_launch_kwargs()["channel"], "chromium")
             os.geteuid = lambda: 1000  # type: ignore[attr-defined]
             self.assertEqual(xhs_browser.chromium_launch_args(), [])
+            self.assertEqual(xhs_browser.chromium_launch_kwargs()["args"], [])
         finally:
             if original is None:
                 delattr(os, "geteuid")

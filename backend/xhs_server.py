@@ -153,7 +153,7 @@ class Service:
                     browser.close()
                 except Exception:
                     pass
-            self._login_error = "登录页没有打开"
+            self._login_error = "登录页没有打开（%s）" % type(exc).__name__
             return
         with self._browser_lock:
             self._browser = browser
