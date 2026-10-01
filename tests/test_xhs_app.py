@@ -258,6 +258,7 @@ class PairingAndConsoleTest(unittest.TestCase):
                 1,
             )
             self.assertIsNone(xhs_browser.choose_qr_index([(40.0, 40.0, False)]))
+            self.assertEqual(xhs_browser.login_card_switch_point(800, 120, 360, 420), (1124, 156))
         finally:
             if original is None:
                 delattr(os, "geteuid")

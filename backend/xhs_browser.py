@@ -77,6 +77,15 @@ def chromium_launch_kwargs() -> dict[str, object]:
     }
 
 
+def login_card_switch_point(x: float, y: float, width: float, height: float) -> tuple[float, float]:
+    """Click point for the corner control on the SMS login card.
+
+    That control is the top-right of the card. The page has no "扫码" label
+    until it is clicked.
+    """
+    return (x + width - 36, y + 36)
+
+
 def choose_qr_index(boxes: list[tuple[float, float, bool]]) -> int | None:
     """Index of the login QR, or None when only decorations are present.
 
@@ -214,10 +223,7 @@ def _capture_qr(page: object) -> bytes | None:
             page.wait_for_timeout(400)  # type: ignore[attr-defined]
         except Exception:
             break
-    try:
-        return page.screenshot(type="png")  # type: ignore[attr-defined]
-    except Exception:
-        return None
+    return None
 
 
 def _screenshot_qr(page: object) -> bytes | None:
@@ -250,11 +256,48 @@ def _screenshot_qr(page: object) -> bytes | None:
 
 
 def _click_scan_tab(page: object) -> bool:
+    if _click_text(page, "扫码"):
+        return True
+    return _click_login_card_corner(page)
+
+
+def _click_text(page: object, text: str) -> bool:
     try:
-        tab = page.get_by_text("扫码", exact=False)  # type: ignore[attr-defined]
+        tab = page.get_by_text(text, exact=False)  # type: ignore[attr-defined]
         if tab.count() < 1:
             return False
         tab.first.click(timeout=1000)
+        return True
+    except Exception:
+        return False
+
+
+def _click_login_card_corner(page: object) -> bool:
+    try:
+        title = page.get_by_text("短信登录", exact=True)  # type: ignore[attr-defined]
+        if title.count() < 1:
+            return False
+        point = title.first.evaluate(
+            """(el) => {
+                let node = el;
+                for (let i = 0; i < 8 && node; i++) {
+                    const rect = node.getBoundingClientRect();
+                    if (rect.width >= 240 && rect.width <= 560 &&
+                        rect.height >= 260 && rect.height <= 700) {
+                        return {x: rect.x, y: rect.y, width: rect.width, height: rect.height};
+                    }
+                    node = node.parentElement;
+                }
+                return null;
+            }"""
+        )
+        if not isinstance(point, dict):
+            return False
+        x, y = login_card_switch_point(
+            float(point["x"]), float(point["y"]),
+            float(point["width"]), float(point["height"]),
+        )
+        page.mouse.click(x, y)  # type: ignore[attr-defined]
         return True
     except Exception:
         return False
