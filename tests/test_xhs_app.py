@@ -239,6 +239,7 @@ class PairingAndConsoleTest(unittest.TestCase):
         status, page = self._request(self.console_url + "/api/login/start", data=b"")
         self.assertEqual(status, 200)
         self.assertIn("登录页没有打开".encode("utf-8"), page)
+        self.assertNotIn(b"http-equiv", page)
 
     def test_root_chromium_disables_the_sandbox(self) -> None:
         import xhs_browser
@@ -278,6 +279,11 @@ class PairingAndConsoleTest(unittest.TestCase):
             self.assertTrue(xhs_browser.login_confirmed(
                 "https://creator.xiaohongshu.com/new/home", before, dict(before),
             ))
+            named = xhs_browser.session_values([
+                {"name": "webId", "value": "guest"},
+                {"name": "galaxy.creator.beaker.session.id", "value": "abc"},
+            ])
+            self.assertEqual(list(named), ["galaxy.creator.beaker.session.id"])
         finally:
             if original is None:
                 delattr(os, "geteuid")

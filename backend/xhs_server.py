@@ -216,15 +216,12 @@ class Service:
                     "<button type=\"submit\">确认 %s</button></form>" % (safe, safe)
                 )
         qr = "<p><img alt=\"qr\" src=\"/api/login/qr\"></p>" if self.qr_png() else ""
-        refresh = '<meta http-equiv="refresh" content="2">' if qr else ""
-        hint = "<p>在手机上点同意后，此页会自动更新。</p>" if qr else ""
-        notice = "<p>%s</p>" % _html_escape(self._login_error) if self._login_error else ""
+        hint = "<p>扫码并在手机上同意后，标题会变成已登录。下面的输入框不会自动填写。</p>" if qr else ""
         page = """<!DOCTYPE html>
 <meta charset="utf-8">
-%s
 <title>Xiaohongshu console</title>
-<h1>%s</h1>
-%s
+<h1 id="state">%s</h1>
+<p id="notice">%s</p>
 %s
 %s
 <form method="post" action="/api/login/start"><button type="submit">登录</button></form>
@@ -233,7 +230,23 @@ class Service:
 <button type="submit">提交 Cookie</button>
 </form>
 %s
-""" % (refresh, LOGIN_LABELS[login], notice, hint, qr, "".join(rows))
+<script>
+setInterval(function () {
+  fetch("/api/status").then(function (response) { return response.json(); }).then(function (data) {
+    var title = document.getElementById("state");
+    if (!title || !data) return;
+    var label = data.login === "logged_in" ? "已登录" : (data.login === "expired" ? "已失效" : "未登录");
+    title.textContent = label;
+    var note = document.getElementById("notice");
+    if (note) note.textContent = data.notice || "";
+    if (data.login === "logged_in") {
+      var image = document.querySelector("img[alt=qr]");
+      if (image && image.parentNode) image.parentNode.removeChild(image);
+    }
+  }).catch(function () {});
+}, 3000);
+</script>
+""" % (LOGIN_LABELS[login], _html_escape(self._login_error), hint, qr, "".join(rows))
         return page.encode("utf-8")
 
 
@@ -345,7 +358,10 @@ class Handler(BaseHTTPRequestHandler):
             self._bytes(200, page, "text/html; charset=utf-8")
             return
         if route == "/api/status":
-            self._json(200, service.state.status_payload())
+            payload = service.state.status_payload()
+            with service._browser_lock:
+                payload["notice"] = service._login_error
+            self._json(200, payload)
             return
         if route == "/api/login/qr":
             png = service.qr_png()

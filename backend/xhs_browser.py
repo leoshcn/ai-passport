@@ -144,11 +144,11 @@ def choose_qr_index(boxes: list[tuple[float, float, bool]]) -> int | None:
     return best_index
 
 
-_SESSION_NAMES = (
-    "web_session",
-    "customer-sso-sid",
-    "galaxy_creator_session_id",
-)
+def _is_session_name(name: str) -> bool:
+    lower = name.lower()
+    if name.startswith("access-token") or name.startswith("x-user-id"):
+        return True
+    return "session" in lower or "sso" in lower
 
 
 def session_values(cookies: list) -> dict[str, str]:
@@ -158,7 +158,7 @@ def session_values(cookies: list) -> dict[str, str]:
         if not isinstance(item, dict):
             continue
         name = str(item.get("name") or "")
-        if name in _SESSION_NAMES or name.startswith("access-token"):
+        if _is_session_name(name):
             found[name] = str(item.get("value") or "")
     return found
 
@@ -252,18 +252,52 @@ class PlaywrightLoginBrowser:
             return
         self._ready.set()
         baseline = session_values(_safe_cookies(context))
+        announced: set[str] = set()
+        opened_home = False
+        opened_home_box = {"profile": False}
+
+        def _note_profile(response: object) -> None:
+            try:
+                if getattr(response, "status", None) == 200 and "personal_info" in str(getattr(response, "url", "")):
+                    opened_home_box["profile"] = True
+            except Exception:
+                return
+        try:
+            page.on("response", _note_profile)
+        except Exception:
+            pass
         while not self._stop.is_set():
             try:
                 page.wait_for_timeout(1000)
             except Exception:
                 break
             cookies = _safe_cookies(context)
+            current = session_values(cookies)
             url = ""
             try:
                 url = str(page.url or "")
             except Exception:
                 url = ""
-            if not login_confirmed(url, baseline, session_values(cookies)):
+            fresh = [
+                name for name in current
+                if current.get(name) != baseline.get(name) and name not in announced
+            ]
+            if fresh:
+                announced.update(fresh)
+                print("login cookie names %s" % ",".join(sorted(fresh)))
+            confirmed = opened_home_box["profile"] or login_confirmed(url, baseline, current)
+            if not confirmed:
+                continue
+            if not opened_home and "/login" in url:
+                opened_home = True
+                try:
+                    page.goto(
+                        "https://creator.xiaohongshu.com/new/home",
+                        wait_until="domcontentloaded",
+                        timeout=20000,
+                    )
+                except Exception:
+                    pass
                 continue
             header = format_cookie_header(cookies)
             with self._lock:
