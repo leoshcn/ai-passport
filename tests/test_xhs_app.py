@@ -286,8 +286,12 @@ class PairingAndConsoleTest(unittest.TestCase):
 
     def test_discover_reply_uses_the_receiving_lan_address(self) -> None:
         from xhs_discover import (
-            choose_reply_ip, device_reply, reply_ip_allowed, reply_ip_for_sender, route_ip_toward,
+            choose_reply_ip, device_reply, discovery_uses_wildcard, reply_ip_allowed,
+            reply_ip_for_sender, route_ip_toward,
         )
+
+        self.assertTrue(discovery_uses_wildcard(False))
+        self.assertFalse(discovery_uses_wildcard(True))
 
         adapters = [
             ("Wi-Fi", "192.168.1.20"),

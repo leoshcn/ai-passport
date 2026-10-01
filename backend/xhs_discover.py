@@ -238,12 +238,26 @@ def _bind_udp(ip: str) -> socket.socket | None:
     return sock
 
 
-def bind_discovery_sockets() -> list[tuple[socket.socket, str | None]]:
-    """One socket per allowed adapter, so the bind address is the receiver.
+def discovery_uses_wildcard(windows: bool) -> bool:
+    """Linux delivers broadcasts only to a socket bound to every address.
 
-    A wildcard socket is only the fallback when no adapter socket could bind.
-    Windows delivers both limited and subnet broadcasts to an interface socket.
+    Windows delivers limited and subnet broadcasts to a socket bound to the
+    interface address, so those listeners stay per adapter.
     """
+    return not windows
+
+
+def bind_discovery_sockets() -> list[tuple[socket.socket, str | None]]:
+    """Bind listeners that can actually receive the device broadcast.
+
+    On Linux the socket is ``0.0.0.0``. The reply address is chosen later from
+    the route toward the sender. On Windows, one socket per allowed adapter
+    keeps that adapter's address as the reply. A wildcard socket is the
+    fallback when no adapter socket could bind.
+    """
+    if discovery_uses_wildcard(os_name_is_windows()):
+        wild = _bind_udp("0.0.0.0")
+        return [(wild, None)] if wild is not None else []
     bound: list[tuple[socket.socket, str | None]] = []
     for name, ip in list_adapters():
         if not reply_ip_allowed(ip, name):
