@@ -2,6 +2,13 @@ FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
+# Playwright's default Azure CDN times out from some networks. This host
+# serves the same Chromium 1148 archive. Override the build-arg to use
+# https://playwright.azureedge.net when that CDN is reachable.
+ARG PLAYWRIGHT_DOWNLOAD_HOST=https://cdn.npmmirror.com/binaries/playwright
+ENV PLAYWRIGHT_DOWNLOAD_HOST=${PLAYWRIGHT_DOWNLOAD_HOST} \
+    PLAYWRIGHT_DOWNLOAD_CONNECTION_TIMEOUT=300000
+
 COPY backend/requirements.txt /tmp/requirements.txt
 RUN pip install --no-cache-dir -r /tmp/requirements.txt \
     && pip install --no-cache-dir playwright==1.49.1 \
