@@ -431,6 +431,18 @@ static void test_provision(void)
         "01234567890123456789012345678901234567890123456789012345678901234";
     assert(!xhs_parse_setup_form(long_pass, strlen(long_pass), &parsed));
 
+    const char *manual_wins = "ssid=picked&password=pw&base=&ssid_manual=typed";
+    assert(xhs_parse_setup_form(manual_wins, strlen(manual_wins), &parsed));
+    assert(strcmp(parsed.ssid, "typed") == 0);
+    assert(strcmp(parsed.password, "pw") == 0);
+    const char *manual_only = "password=secret&ssid_manual=by-hand&base=";
+    assert(xhs_parse_setup_form(manual_only, strlen(manual_only), &parsed));
+    assert(strcmp(parsed.ssid, "by-hand") == 0);
+    const char *both_empty = "ssid=&password=secret&ssid_manual=";
+    assert(!xhs_parse_setup_form(both_empty, strlen(both_empty), &parsed));
+    assert(parsed.ssid[0] == '\0');
+    assert(parsed.password[0] == '\0');
+
     const char *pending = "{\"ok\":true,\"status\":\"pending\",\"token\":\"token-ok-1\"}";
     xhs_pair_reply_t got;
     assert(xhs_parse_pair_reply(pending, &got));
@@ -444,6 +456,65 @@ static void test_provision(void)
     assert(strcmp(got.base_url, "http://192.168.1.20:8787") == 0);
 }
 
+static void put_ap(xhs_scan_ap_t *ap, const char *ssid, int rssi, bool open)
+{
+    memset(ap, 0, sizeof(*ap));
+    snprintf(ap->ssid, sizeof(ap->ssid), "%s", ssid);
+    ap->rssi = (int8_t)rssi;
+    ap->open = open;
+}
+
+static void test_scan_merge(void)
+{
+    xhs_scan_ap_t in[16];
+    xhs_scan_ap_t out[16];
+    memset(out, 0, sizeof(out));
+
+    put_ap(&in[0], "c", -70, false);
+    put_ap(&in[1], "a", -40, true);
+    put_ap(&in[2], "b", -55, false);
+    size_t n = xhs_scan_merge(in, 3, out, 16);
+    assert(n == 3);
+    assert(strcmp(out[0].ssid, "a") == 0 && out[0].rssi == -40 && out[0].open);
+    assert(strcmp(out[1].ssid, "b") == 0 && out[1].rssi == -55 && !out[1].open);
+    assert(strcmp(out[2].ssid, "c") == 0 && out[2].rssi == -70 && !out[2].open);
+
+    put_ap(&in[0], "home", -60, false);
+    put_ap(&in[1], "", -10, true);
+    put_ap(&in[2], "home", -40, true);
+    put_ap(&in[3], "home", -40, false);
+    put_ap(&in[4], "other", -80, false);
+    n = xhs_scan_merge(in, 5, out, 16);
+    assert(n == 2);
+    assert(strcmp(out[0].ssid, "home") == 0);
+    assert(out[0].rssi == -40);
+    assert(out[0].open);
+    assert(strcmp(out[1].ssid, "other") == 0);
+    assert(out[1].rssi == -80);
+
+    memset(in, 0, sizeof(in));
+    /* 最弱的先到，逼出「超过 12 条就丢掉更弱的」那条路径。 */
+    for (int i = 0; i < 14; i++) {
+        char name[8];
+        snprintf(name, sizeof(name), "n%02d", 13 - i);
+        put_ap(&in[i], name, -23 + i, false);
+    }
+    put_ap(&in[14], "n00", -30, true);
+    put_ap(&in[15], "", 0, true);
+    n = xhs_scan_merge(in, 16, out, 16);
+    assert(n == 12);
+    assert(strcmp(out[0].ssid, "n00") == 0);
+    assert(out[0].rssi == -10);
+    assert(!out[0].open);
+    assert(strcmp(out[11].ssid, "n11") == 0);
+    assert(out[11].rssi == -21);
+    for (size_t i = 0; i < n; i++) {
+        assert(strcmp(out[i].ssid, "n12") != 0);
+        assert(strcmp(out[i].ssid, "n13") != 0);
+        if (i > 0) assert(out[i - 1].rssi >= out[i].rssi);
+    }
+}
+
 int main(void)
 {
     test_format();
@@ -452,5 +523,6 @@ int main(void)
     test_buttons();
     test_parse();
     test_provision();
+    test_scan_merge();
     return 0;
 }

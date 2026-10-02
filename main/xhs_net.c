@@ -15,6 +15,8 @@
 #include "freertos/task.h"
 #include "lwip/sockets.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -50,22 +52,92 @@ static TickType_t s_ap_hold_until;
 static bool s_form_ready;
 static xhs_setup_form_t s_form;
 
+#define XHS_SCAN_FETCH_MAX 32
+static xhs_scan_ap_t s_scan[XHS_SCAN_LIST_MAX];
+static size_t s_scan_count;
+static bool s_scan_ready;
+static bool s_scan_pending;
+static bool s_scan_inflight;
+static volatile bool s_scan_done;
+static bool s_rescan;
+
 static xhs_prov_t s_prov;
 static xhs_net_cfg_t s_boot;
 static uint32_t s_pair_seed;
 static xhs_fetch_result_t s_outgoing;
 
-static const char PORTAL_PAGE[] =
-    "<!DOCTYPE html><html><head><meta charset=\"utf-8\">"
-    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-    "<title>Passport-Setup</title></head><body>"
-    "<form method=\"post\" action=\"/setup\">"
-    "<p>Wi-Fi<br><input name=\"ssid\" maxlength=\"32\" required></p>"
-    "<p>密码<br><input name=\"password\" type=\"password\" maxlength=\"64\"></p>"
-    "<p>后端地址，可留空<br><input name=\"base\" maxlength=\"120\" "
-    "placeholder=\"http://192.168.1.10:8787\"></p>"
-    "<p><button type=\"submit\">连接</button></p>"
-    "</form></body></html>";
+static const char PAGE_OPEN[] =
+    "<!DOCTYPE html><html lang=\"zh-CN\"><head><meta charset=\"utf-8\">"
+    "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">";
+static const char PAGE_REFRESH_ROOT[] =
+    "<meta http-equiv=\"refresh\" content=\"2;url=/\">";
+static const char PAGE_REFRESH_STATUS[] =
+    "<meta http-equiv=\"refresh\" content=\"2;url=/status\">";
+static const char PAGE_STYLE[] =
+    "<title>Passport-Setup</title><style>"
+    ":root{--desk:#d5e0ea;--card:#f7fafc;--ink:#1b2836;--muted:#5d6d7e;--line:#d3dee8;--seal:#d61f3c}"
+    "*{box-sizing:border-box}"
+    "body{margin:0;min-height:100vh;color:var(--ink);background:var(--desk);"
+    "font-family:\"Avenir Next\",\"Segoe UI\",\"PingFang SC\",\"Hiragino Sans GB\","
+    "\"Noto Sans SC\",\"Microsoft YaHei\",sans-serif;font-size:1rem;line-height:1.5}"
+    "main{width:min(28rem,calc(100% - 1.5rem));margin:1.25rem auto;padding:1.3rem 1.15rem 1.2rem;"
+    "background:var(--card);border-radius:1.2rem;box-shadow:0 16px 40px rgba(27,40,54,.08)}"
+    "h1{margin:0 0 .35rem;font-size:1.55rem;line-height:1.2}"
+    ".sub{margin:0 0 .9rem;color:var(--muted);font-size:.92rem}"
+    "form{margin:0}"
+    "label.row{display:flex;align-items:center;gap:.7rem;min-height:44px;padding:.2rem 0;"
+    "border-bottom:1px solid var(--line);cursor:pointer}"
+    "label.row input{width:1.15rem;height:1.15rem;margin:0;accent-color:var(--seal);flex:none}"
+    ".name{flex:1;word-break:break-all}"
+    ".open{color:var(--muted);font-size:.75rem;flex:none}"
+    ".bars{display:inline-flex;align-items:flex-end;gap:2px;width:18px;height:16px;flex:none}"
+    ".bars i{display:block;width:3px;border-radius:1px;background:var(--line)}"
+    ".bars i:nth-child(1){height:4px}.bars i:nth-child(2){height:8px}"
+    ".bars i:nth-child(3){height:12px}.bars i:nth-child(4){height:16px}"
+    ".l1 i:nth-child(1),.l2 i:nth-child(-n+2),.l3 i:nth-child(-n+3),.l4 i{background:var(--seal)}"
+    "details{margin:.85rem 0 .2rem;border-top:1px solid var(--line)}"
+    "summary{min-height:44px;display:flex;align-items:center;cursor:pointer}"
+    ".hint{margin:.1rem 0 .45rem;color:var(--muted);font-size:.85rem}"
+    "label.field{display:block;margin:.75rem 0;color:var(--muted);font-size:.85rem}"
+    "input[name=ssid_manual],input[name=password],input[name=base]{display:block;width:100%;"
+    "min-height:44px;margin-top:.3rem;padding:.4rem .7rem;border:1px solid var(--line);"
+    "border-radius:10px;background:#fff;color:var(--ink);font:inherit}"
+    "button{appearance:none;width:100%;min-height:44px;margin-top:.4rem;border:0;border-radius:999px;"
+    "background:var(--seal);color:#fff7f4;font:inherit;font-weight:650;cursor:pointer}"
+    ".again{margin:1rem 0 0}a{color:var(--seal)}"
+    "</style></head><body><main>";
+static const char SCAN_HEAD[] =
+    "<h1>正在扫描</h1>"
+    "<p class=\"sub\">正在查找附近的 2.4 GHz 网络。页面会自动刷新。</p>";
+static const char EMPTY_HEAD[] =
+    "<h1>选择 Wi-Fi</h1>"
+    "<p class=\"sub\">没有扫到 2.4 GHz 网络。隐藏网络和只有 5 GHz 的网络不会出现。"
+    "可以手动输入，或重新扫描。</p>";
+static const char LIST_HEAD[] =
+    "<h1>选择 Wi-Fi</h1>"
+    "<p class=\"sub\">点选一个网络，再填写密码。开放网络可以不填密码。</p>";
+static const char FORM_OPEN[] = "<form method=\"post\" action=\"/setup\">";
+static const char FORM_TAIL[] =
+    "<details><summary>手动输入</summary>"
+    "<p class=\"hint\">这里填了名称，就以这里为准。</p>"
+    "<input name=\"ssid_manual\" maxlength=\"32\" autocomplete=\"off\" placeholder=\"网络名称\">"
+    "</details>"
+    "<label class=\"field\">密码"
+    "<input name=\"password\" type=\"password\" maxlength=\"64\" autocomplete=\"off\"></label>"
+    "<label class=\"field\">后端地址，可留空"
+    "<input name=\"base\" maxlength=\"120\" placeholder=\"http://192.168.1.10:8787\"></label>"
+    "<button type=\"submit\">连接</button></form>"
+    "<p class=\"again\"><a href=\"/?rescan=1\">重新扫描</a></p>";
+static const char PAGE_CONNECTING[] =
+    "<h1>正在连接</h1><p class=\"sub\">正在连接家里的 Wi-Fi。</p>";
+static const char PAGE_FAILED[] =
+    "<h1>没连上</h1>"
+    "<p class=\"sub\">请检查名称和密码后再试。错误密码不会被保存。</p>"
+    "<p class=\"again\"><a href=\"/\">返回列表</a></p>";
+static const char PAGE_SUCCESS[] =
+    "<h1>已连上</h1>"
+    "<p class=\"sub\">已连上家里的 Wi-Fi。请断开本热点，看设备屏幕上的配对码。</p>";
+static const char PAGE_TAIL[] = "</main></body></html>";
 
 static void publish(const xhs_fetch_result_t *result)
 {
@@ -162,6 +234,16 @@ static void on_ap_ip(void *arg, esp_event_base_t base, int32_t id, void *data)
     ESP_LOGI(TAG, "ap dhcp assigned");
 }
 
+static void on_scan_done(void *arg, esp_event_base_t base, int32_t id, void *data)
+{
+    (void)arg;
+    (void)base;
+    (void)id;
+    (void)data;
+    s_scan_done = true;
+    if (s_task) xTaskNotifyGive(s_task);
+}
+
 static esp_err_t ensure_wifi(void)
 {
     if (s_wifi_inited) return ESP_OK;
@@ -188,6 +270,8 @@ static esp_err_t ensure_wifi(void)
     err = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_AP_STACONNECTED, on_ap_sta, NULL);
     if (err != ESP_OK) return err;
     err = esp_event_handler_register(IP_EVENT, IP_EVENT_AP_STAIPASSIGNED, on_ap_ip, NULL);
+    if (err != ESP_OK) return err;
+    err = esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_SCAN_DONE, on_scan_done, NULL);
     if (err != ESP_OK) return err;
     err = esp_wifi_set_storage(WIFI_STORAGE_RAM);
     if (err != ESP_OK) return err;
@@ -330,39 +414,148 @@ static void dns_stop(void)
     for (int i = 0; i < 20 && s_dns_task; i++) vTaskDelay(pdMS_TO_TICKS(100));
 }
 
-static esp_err_t send_html(httpd_req_t *req, const char *page)
+static esp_err_t chunk_text(httpd_req_t *req, const char *text)
 {
-    httpd_resp_set_type(req, "text/html; charset=utf-8");
-    return httpd_resp_sendstr(req, page);
+    return httpd_resp_send_chunk(req, text, (ssize_t)strlen(text));
+}
+
+static esp_err_t send_status_page(httpd_req_t *req, const char *refresh, const char *body)
+{
+    esp_err_t err = httpd_resp_set_type(req, "text/html; charset=utf-8");
+    if (err == ESP_OK) err = chunk_text(req, PAGE_OPEN);
+    if (err == ESP_OK && refresh) err = chunk_text(req, refresh);
+    if (err == ESP_OK) err = chunk_text(req, PAGE_STYLE);
+    if (err == ESP_OK) err = chunk_text(req, body);
+    if (err == ESP_OK) err = chunk_text(req, PAGE_TAIL);
+    if (err == ESP_OK) err = httpd_resp_send_chunk(req, NULL, 0);
+    return err;
+}
+
+static int signal_bars(int8_t rssi)
+{
+    if (rssi >= -55) return 4;
+    if (rssi >= -67) return 3;
+    if (rssi >= -75) return 2;
+    return 1;
+}
+
+static size_t html_escape(const char *src, char *dst, size_t cap)
+{
+    size_t used = 0;
+    if (!dst || cap == 0) return 0;
+    dst[0] = '\0';
+    if (!src) return 0;
+    for (size_t i = 0; src[i] != '\0'; i++) {
+        const char *rep;
+        char one[2];
+        if (src[i] == '&') rep = "&amp;";
+        else if (src[i] == '<') rep = "&lt;";
+        else if (src[i] == '"') rep = "&quot;";
+        else {
+            one[0] = src[i];
+            one[1] = '\0';
+            rep = one;
+        }
+        size_t n = strlen(rep);
+        if (used + n + 1 > cap) {
+            dst[0] = '\0';
+            return 0;
+        }
+        memcpy(dst + used, rep, n);
+        used += n;
+        dst[used] = '\0';
+    }
+    return used;
+}
+
+static esp_err_t send_ap_row(httpd_req_t *req, const xhs_scan_ap_t *ap)
+{
+    /* 32 个引号会变成 32 个 &quot;，196 字节，再加结尾。 */
+    char value[200];
+    char text[200];
+    if (html_escape(ap->ssid, value, sizeof(value)) == 0) return ESP_OK;
+    if (html_escape(ap->ssid, text, sizeof(text)) == 0) return ESP_OK;
+    char line[640];
+    int n = snprintf(line, sizeof(line),
+                     "<label class=\"row\"><input type=\"radio\" name=\"ssid\" value=\"%s\">"
+                     "<span class=\"bars l%d\" aria-hidden=\"true\"><i></i><i></i><i></i><i></i></span>"
+                     "<span class=\"name\">%s</span>%s</label>",
+                     value, signal_bars(ap->rssi), text,
+                     ap->open ? "<span class=\"open\">无需密码</span>" : "");
+    if (n < 0 || (size_t)n >= sizeof(line)) return ESP_OK;
+    return httpd_resp_send_chunk(req, line, (ssize_t)n);
+}
+
+static esp_err_t send_setup_page(httpd_req_t *req, bool refresh)
+{
+    xhs_scan_ap_t list[XHS_SCAN_LIST_MAX];
+    size_t count = 0;
+    bool ready = false;
+    bool inflight = false;
+    taskENTER_CRITICAL(&s_mux);
+    ready = s_scan_ready;
+    inflight = s_scan_inflight;
+    count = s_scan_count;
+    if (count > XHS_SCAN_LIST_MAX) count = XHS_SCAN_LIST_MAX;
+    if (count > 0) memcpy(list, s_scan, count * sizeof(list[0]));
+    taskEXIT_CRITICAL(&s_mux);
+
+    esp_err_t err = httpd_resp_set_type(req, "text/html; charset=utf-8");
+    if (err == ESP_OK) err = chunk_text(req, PAGE_OPEN);
+    /* 扫描还没结束时继续刷新。重新扫描的第一次响应时，进行中标志可能还没置上。 */
+    if (err == ESP_OK && (!ready || inflight || refresh)) err = chunk_text(req, PAGE_REFRESH_ROOT);
+    if (err == ESP_OK) err = chunk_text(req, PAGE_STYLE);
+    if (!ready) {
+        if (err == ESP_OK) err = chunk_text(req, SCAN_HEAD);
+        if (err == ESP_OK) err = chunk_text(req, PAGE_TAIL);
+        if (err == ESP_OK) err = httpd_resp_send_chunk(req, NULL, 0);
+        return err;
+    }
+    if (count == 0) {
+        if (err == ESP_OK) err = chunk_text(req, EMPTY_HEAD);
+    } else {
+        if (err == ESP_OK) err = chunk_text(req, LIST_HEAD);
+    }
+    if (err == ESP_OK) err = chunk_text(req, FORM_OPEN);
+    for (size_t i = 0; err == ESP_OK && i < count; i++) err = send_ap_row(req, &list[i]);
+    if (err == ESP_OK) err = chunk_text(req, FORM_TAIL);
+    if (err == ESP_OK) err = chunk_text(req, PAGE_TAIL);
+    if (err == ESP_OK) err = httpd_resp_send_chunk(req, NULL, 0);
+    return err;
+}
+
+static bool root_rescan(const char *uri)
+{
+    if (!uri || uri[0] != '/' || uri[1] != '?') return false;
+    const char *q = uri + 2;
+    while (*q) {
+        if (strncmp(q, "rescan=1", 8) == 0 && (q[8] == '\0' || q[8] == '&')) return true;
+        const char *amp = strchr(q, '&');
+        if (!amp) break;
+        q = amp + 1;
+    }
+    return false;
 }
 
 static esp_err_t status_get(httpd_req_t *req)
 {
     int state = s_portal_state;
-    if (state == 3) {
-        return send_html(req,
-            "<!DOCTYPE html><meta charset=\"utf-8\">"
-            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-            "<p>已连上家里的 Wi-Fi。请断开本热点，看设备屏幕上的配对码。</p>");
-    }
-    if (state == 2) {
-        return send_html(req,
-            "<!DOCTYPE html><meta charset=\"utf-8\">"
-            "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-            "<p>没连上。请检查名称和密码后再试。</p>"
-            "<p><a href=\"/\">返回</a></p>");
-    }
-    return send_html(req,
-        "<!DOCTYPE html><meta charset=\"utf-8\">"
-        "<meta http-equiv=\"refresh\" content=\"2;url=/status\">"
-        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
-        "<p>正在连接</p>");
+    if (state == 3) return send_status_page(req, NULL, PAGE_SUCCESS);
+    if (state == 2) return send_status_page(req, NULL, PAGE_FAILED);
+    return send_status_page(req, PAGE_REFRESH_STATUS, PAGE_CONNECTING);
 }
 
 static esp_err_t portal_get(httpd_req_t *req)
 {
-    if (strncmp(req->uri, "/status", 7) == 0) return status_get(req);
-    return send_html(req, PORTAL_PAGE);
+    if (req->uri && strncmp(req->uri, "/status", 7) == 0) return status_get(req);
+    bool rescan = root_rescan(req->uri);
+    if (rescan) {
+        taskENTER_CRITICAL(&s_mux);
+        s_rescan = true;
+        taskEXIT_CRITICAL(&s_mux);
+        if (s_task) xTaskNotifyGive(s_task);
+    }
+    return send_setup_page(req, rescan);
 }
 
 static esp_err_t setup_post(httpd_req_t *req)
@@ -407,10 +600,7 @@ static esp_err_t setup_post(httpd_req_t *req)
     memset(&form, 0, sizeof(form));
     s_portal_state = 1;
     if (s_task) xTaskNotifyGive(s_task);
-    return send_html(req,
-        "<!DOCTYPE html><meta charset=\"utf-8\">"
-        "<meta http-equiv=\"refresh\" content=\"2;url=/status\">"
-        "<p>正在连接</p>");
+    return send_status_page(req, PAGE_REFRESH_STATUS, PAGE_CONNECTING);
 }
 
 static esp_err_t http_start(void)
@@ -495,6 +685,7 @@ static esp_err_t provision_start(void)
         s_wifi_started = true;
     }
     (void)esp_wifi_set_ps(WIFI_PS_NONE);
+    if (s_scan_inflight) (void)esp_wifi_scan_stop();
     err = dns_start();
     if (err != ESP_OK) return err;
     err = http_start();
@@ -503,6 +694,11 @@ static esp_err_t provision_start(void)
         return err;
     }
     s_ap_services = true;
+    taskENTER_CRITICAL(&s_mux);
+    s_scan_count = 0;
+    s_scan_ready = false;
+    taskEXIT_CRITICAL(&s_mux);
+    s_scan_pending = true;
     log_heap("provision start");
     return ESP_OK;
 }
@@ -746,6 +942,108 @@ static void pair_step(void)
     accept_pairing_buffer(buf);
 }
 
+static void absorb_scan_results(void)
+{
+    uint16_t total = 0;
+    if (esp_wifi_scan_get_ap_num(&total) != ESP_OK) total = 0;
+    uint16_t want = total;
+    if (want > XHS_SCAN_FETCH_MAX) want = XHS_SCAN_FETCH_MAX;
+
+    xhs_scan_ap_t raw[XHS_SCAN_FETCH_MAX];
+    size_t raw_n = 0;
+    memset(raw, 0, sizeof(raw));
+    if (want == 0) {
+        wifi_ap_record_t one;
+        uint16_t n = 1;
+        (void)esp_wifi_scan_get_ap_records(&n, &one);
+    } else {
+        wifi_ap_record_t *recs = calloc((size_t)want, sizeof(*recs));
+        if (!recs) {
+            wifi_ap_record_t one;
+            uint16_t n = 1;
+            (void)esp_wifi_scan_get_ap_records(&n, &one);
+        } else {
+            uint16_t n = want;
+            if (esp_wifi_scan_get_ap_records(&n, recs) == ESP_OK) {
+                if (n > XHS_SCAN_FETCH_MAX) n = XHS_SCAN_FETCH_MAX;
+                for (uint16_t i = 0; i < n; i++) {
+                    memcpy(raw[raw_n].ssid, recs[i].ssid, 32);
+                    raw[raw_n].ssid[32] = '\0';
+                    raw[raw_n].rssi = recs[i].rssi;
+                    raw[raw_n].open = recs[i].authmode == WIFI_AUTH_OPEN;
+                    raw_n++;
+                }
+            }
+            free(recs);
+        }
+    }
+
+    xhs_scan_ap_t merged[XHS_SCAN_LIST_MAX];
+    size_t merged_n = xhs_scan_merge(raw, raw_n, merged, XHS_SCAN_LIST_MAX);
+    memset(raw, 0, sizeof(raw));
+    /* 热点刚重新打开时，这一次结果作废，等即将开始的那次扫描。 */
+    if (s_scan_pending) return;
+    taskENTER_CRITICAL(&s_mux);
+    memset(s_scan, 0, sizeof(s_scan));
+    if (merged_n > XHS_SCAN_LIST_MAX) merged_n = XHS_SCAN_LIST_MAX;
+    if (merged_n > 0) memcpy(s_scan, merged, merged_n * sizeof(s_scan[0]));
+    s_scan_count = merged_n;
+    s_scan_ready = true;
+    taskEXIT_CRITICAL(&s_mux);
+}
+
+/* 扫描只由网络任务启动。页面请求最多把重新扫描标志置上。 */
+static void handle_scan(void)
+{
+    if (s_scan_done) {
+        s_scan_done = false;
+        taskENTER_CRITICAL(&s_mux);
+        s_scan_inflight = false;
+        taskEXIT_CRITICAL(&s_mux);
+        absorb_scan_results();
+    }
+
+    bool rescan = false;
+    bool form_waiting = false;
+    taskENTER_CRITICAL(&s_mux);
+    rescan = s_rescan;
+    form_waiting = s_form_ready;
+    taskEXIT_CRITICAL(&s_mux);
+
+    bool joining = s_prov.phase == XHS_PROV_JOINING || s_join_watch;
+    if (s_scan_inflight) {
+        if (rescan) {
+            taskENTER_CRITICAL(&s_mux);
+            s_rescan = false;
+            taskEXIT_CRITICAL(&s_mux);
+        }
+        return;
+    }
+    if (s_prov.phase != XHS_PROV_AP || joining || form_waiting || !s_ap_services || !s_wifi_started) {
+        return;
+    }
+    if (!s_scan_pending && !rescan) return;
+
+    s_scan_pending = false;
+    taskENTER_CRITICAL(&s_mux);
+    s_rescan = false;
+    taskEXIT_CRITICAL(&s_mux);
+    esp_err_t err = esp_wifi_scan_start(NULL, false);
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "scan start failed %d", (int)err);
+        if (!s_scan_ready) {
+            taskENTER_CRITICAL(&s_mux);
+            s_scan_count = 0;
+            s_scan_ready = true;
+            taskEXIT_CRITICAL(&s_mux);
+        }
+        return;
+    }
+    taskENTER_CRITICAL(&s_mux);
+    s_scan_inflight = true;
+    taskEXIT_CRITICAL(&s_mux);
+}
+
 static bool take_form(xhs_setup_form_t *form)
 {
     bool ready = false;
@@ -762,6 +1060,7 @@ static bool take_form(xhs_setup_form_t *form)
 
 static void handle_form(void)
 {
+    if (s_scan_inflight) return;
     xhs_setup_form_t form;
     if (!take_form(&form)) return;
     if (!s_ap_services && provision_start() != ESP_OK) {
@@ -877,6 +1176,7 @@ static void net_task(void *arg)
 
     for (;;) {
         handle_reprovision();
+        handle_scan();
         handle_form();
         handle_join();
         if (s_ap_services && s_portal_state == 3 &&

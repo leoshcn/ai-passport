@@ -79,14 +79,14 @@ On the phone:
 
 1. Join `Passport-Setup`. The phone leaves your home Wi-Fi while it is on this hotspot.
 2. Open `http://192.168.4.1`. If a setup page does not appear by itself, type that address.
-3. Enter the home Wi-Fi name and password.
+3. Pick the home network from the list and enter its password. An open network can leave the password empty. If the name is not listed, expand Manual entry and type it. A name filled in there is the one the device uses.
 4. Leave the backend address empty.
-5. Submit.
+5. Tap Connect.
 
 The device shows that it is connecting. The phone page refreshes on its own.
 
 - When the phone says the home Wi-Fi is connected, leave `Passport-Setup` and rejoin the home Wi-Fi. Read the pairing code on the device. The hotspot closes about 15 seconds later.
-- When the phone says it did not connect, check the name and password and try again. A wrong password is not saved. The device returns to the hotspot screen.
+- When the phone says it did not connect, follow the link back to the list, check the name and password, and try again. A wrong password is not saved. The device returns to the hotspot screen.
 
 Fill in the backend address only when this computer cannot hear the broadcast. Use `http://<server-lan-ip>:8787`. The device then asks that address directly and does not broadcast. You still confirm the pairing code once, on that computer.
 

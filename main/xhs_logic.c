@@ -549,6 +549,67 @@ bool xhs_setup_form_ok(const xhs_setup_form_t *form)
     return xhs_http_base_ok(form->base_url);
 }
 
+static void scan_copy(xhs_scan_ap_t *dst, const xhs_scan_ap_t *src)
+{
+    size_t n = 0;
+    memset(dst, 0, sizeof(*dst));
+    while (n + 1 < sizeof(dst->ssid) && src->ssid[n] != '\0') {
+        dst->ssid[n] = src->ssid[n];
+        n++;
+    }
+    dst->ssid[n] = '\0';
+    dst->rssi = src->rssi;
+    dst->open = src->open;
+}
+
+static int scan_rssi_desc(const void *left, const void *right)
+{
+    int8_t a = ((const xhs_scan_ap_t *)left)->rssi;
+    int8_t b = ((const xhs_scan_ap_t *)right)->rssi;
+    if (a > b) return -1;
+    if (a < b) return 1;
+    return 0;
+}
+
+size_t xhs_scan_merge(const xhs_scan_ap_t *in, size_t in_count,
+                      xhs_scan_ap_t *out, size_t out_cap)
+{
+    if (!in || !out || out_cap == 0) return 0;
+    size_t limit = out_cap;
+    if (limit > XHS_SCAN_LIST_MAX) limit = XHS_SCAN_LIST_MAX;
+    size_t n = 0;
+    for (size_t i = 0; i < in_count; i++) {
+        xhs_scan_ap_t item;
+        scan_copy(&item, &in[i]);
+        if (item.ssid[0] == '\0') continue;
+        size_t found = n;
+        for (size_t j = 0; j < n; j++) {
+            if (strcmp(out[j].ssid, item.ssid) == 0) {
+                found = j;
+                break;
+            }
+        }
+        if (found < n) {
+            if (item.rssi > out[found].rssi) {
+                out[found].rssi = item.rssi;
+                out[found].open = item.open;
+            }
+            continue;
+        }
+        if (n < limit) {
+            out[n++] = item;
+            continue;
+        }
+        size_t weak = 0;
+        for (size_t j = 1; j < n; j++) {
+            if (out[j].rssi < out[weak].rssi) weak = j;
+        }
+        if (item.rssi > out[weak].rssi) out[weak] = item;
+    }
+    if (n > 1) qsort(out, n, sizeof(out[0]), scan_rssi_desc);
+    return n;
+}
+
 bool xhs_parse_setup_form(const char *body, size_t len, xhs_setup_form_t *out)
 {
     if (!out) return false;
@@ -557,6 +618,8 @@ bool xhs_parse_setup_form(const char *body, size_t len, xhs_setup_form_t *out)
         return false;
     }
     memset(out, 0, sizeof(*out));
+    char manual[XHS_SSID_CAP];
+    memset(manual, 0, sizeof(manual));
     bool saw_ssid = false;
     size_t i = 0;
     while (i < len) {
@@ -587,15 +650,25 @@ bool xhs_parse_setup_form(const char *body, size_t len, xhs_setup_form_t *out)
                 } else if (strcmp(key, "base") == 0) {
                     dest = out->base_url;
                     cap = sizeof(out->base_url);
+                } else if (strcmp(key, "ssid_manual") == 0) {
+                    dest = manual;
+                    cap = sizeof(manual);
                 }
                 if (dest && !url_decode(eq + 1, val_len, dest, cap)) {
                     memset(out, 0, sizeof(*out));
+                    memset(manual, 0, sizeof(manual));
                     return false;
                 }
             }
         }
         if (i < len && body[i] == '&') i++;
     }
+    /* 手动名称非空时覆盖点选结果。两者都空则下面的校验失败，并清掉密码。 */
+    if (manual[0] != '\0') {
+        memcpy(out->ssid, manual, sizeof(out->ssid));
+        saw_ssid = true;
+    }
+    memset(manual, 0, sizeof(manual));
     if (!saw_ssid || !xhs_setup_form_ok(out)) {
         memset(out, 0, sizeof(*out));
         return false;

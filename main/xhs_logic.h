@@ -87,13 +87,21 @@ typedef struct {
 #define XHS_PASS_CAP 65
 #define XHS_TOKEN_CAP 65
 #define XHS_BASE_CAP 128
-#define XHS_SETUP_BODY_MAX 480
+#define XHS_SETUP_BODY_MAX 800
+#define XHS_SCAN_LIST_MAX 12
 
 typedef struct {
     char ssid[XHS_SSID_CAP];
     char password[XHS_PASS_CAP];
     char base_url[XHS_BASE_CAP];
 } xhs_setup_form_t;
+
+/* 扫描缓存里的一条网络。开放网络的密码可以留空。 */
+typedef struct {
+    char ssid[XHS_SSID_CAP];
+    int8_t rssi;
+    bool open;
+} xhs_scan_ap_t;
 
 typedef struct {
     char ssid[XHS_SSID_CAP];
@@ -148,6 +156,13 @@ bool xhs_config_usable(const char *ssid, const char *password,
 
 bool xhs_setup_form_ok(const xhs_setup_form_t *form);
 bool xhs_parse_setup_form(const char *body, size_t len, xhs_setup_form_t *out);
+
+/*
+ * 合并扫描结果：丢掉空名称，同名只留 RSSI 更大的一条（相等则留已写入的），
+ * 再按 RSSI 从高到低排序。最多写入 12 条，也不会超过 out_cap。in 与 out 不能重叠。
+ */
+size_t xhs_scan_merge(const xhs_scan_ap_t *in, size_t in_count,
+                      xhs_scan_ap_t *out, size_t out_cap);
 
 bool xhs_pair_code_ok(const char *code);
 void xhs_pair_code_from_seed(char out[5], uint32_t seed);

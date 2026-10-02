@@ -36,7 +36,7 @@ The 7-day value subtracts an unfollow count when the creator payload includes on
 
 ## Device setup
 
-`main/xhs_config.h` is an empty template. Do not put a Wi-Fi password, backend URL, or device token in it. With no saved provisioning record, the device opens an open hotspot named `Passport-Setup` and serves a setup page at `http://192.168.4.1`. The page asks for the home Wi-Fi name, the password, and an optional backend base URL such as `http://<this-computer-lan-ip>:8787`.
+`main/xhs_config.h` is an empty template. Do not put a Wi-Fi password, backend URL, or device token in it. With no saved provisioning record, the device opens an open hotspot named `Passport-Setup` and serves a setup page at `http://192.168.4.1`. The page lists up to 12 nearby 2.4 GHz networks, strongest first. Pick one and enter the password, or expand manual entry and type a name. A filled-in manual name is used instead of the picked one. Open networks can omit the password. Hidden networks and 5 GHz-only names do not appear. The page also asks for an optional backend base URL such as `http://<this-computer-lan-ip>:8787`.
 
 The device writes Wi-Fi to NVS only after the station gets an IP, then it stops the hotspot, DNS, and setup HTTP server. A wrong password is not stored. If an older good record exists, a failed attempt keeps it.
 
