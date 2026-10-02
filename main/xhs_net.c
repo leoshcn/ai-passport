@@ -547,7 +547,7 @@ static esp_err_t status_get(httpd_req_t *req)
 
 static esp_err_t portal_get(httpd_req_t *req)
 {
-    if (req->uri && strncmp(req->uri, "/status", 7) == 0) return status_get(req);
+    if (strncmp(req->uri, "/status", 7) == 0) return status_get(req);
     bool rescan = root_rescan(req->uri);
     if (rescan) {
         taskENTER_CRITICAL(&s_mux);
