@@ -1,0 +1,13 @@
+---
+description: After finished work, commit and push without waiting to be asked
+alwaysApply: true
+---
+
+# Commit and push completed work
+
+When a requested code change is finished, commit the relevant files and push the current branch. Do not wait for a separate commit or push request.
+
+- Follow this repository's commit style: `feat(xhs):` / `fix(xhs):`, English, one coherent change per commit.
+- Stage only files that belong to the change. Leave unrelated dirty files, `.trellis/`, caches, and secrets unstaged.
+- Do not skip hooks, force-push, or amend a commit that was not just created in this session and is still unpushed.
+- If the push is rejected or authentication fails, stop and report the error.
