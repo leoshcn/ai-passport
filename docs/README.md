@@ -46,6 +46,7 @@ it anything—from a pocket companion to something no one has imagined yet.
 
 | I want to… | Start here |
 | --- | --- |
+| Use the Xiaohongshu creator dashboard | [User guide](xhs-dashboard.md) |
 | Use the device or try an official play | [Getting started](https://ai-passport.folotoy.cn/guides/getting-started/) · [Official plays](https://ai-passport.folotoy.cn/plays/) |
 | Build a custom application with AI | [Agent instructions](../AGENTS.md) · [AI development guide](development/ai-guide.md) · [Required skills](../skills/README.md) |
 | Prepare my environment and build firmware | [Environment setup](development/engineering/environment-setup.md) · [Build and test](development/engineering/build-and-test.md) |
@@ -205,6 +206,7 @@ provide reference material. Choose the entry that matches your task.
 
 | Resource | What you will find |
 | --- | --- |
+| [Xiaohongshu dashboard](xhs-dashboard.md) | First-time setup, pairing, the dashboard, and settings |
 | [Development](development/README.md) | AI workflow, engineering conventions, CI, and release guidance |
 | [AI skills](../skills/README.md) | Development, environment setup, builds, device testing, and debugging |
 | [Hardware](hardware-design/README.md) | Board facts, interface boundaries, acceptance checklists, and troubleshooting |
