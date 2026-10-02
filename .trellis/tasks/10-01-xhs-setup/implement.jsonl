@@ -1,0 +1,1 @@
+{"file": ".trellis/tasks/10-01-xhs-setup/research/lan-discovery-docker-desktop.md", "reason": "Docker Desktop on Windows does not deliver LAN UDP broadcasts into a container. The pairing listener must run on the Windows host, and the device API uses published TCP 8787."}

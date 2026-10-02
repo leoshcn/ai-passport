@@ -1,0 +1,1 @@
+{"file": ".trellis/tasks/10-01-xhs-setup/research/lan-discovery-docker-desktop.md", "reason": "Review must reject a design that expects the container to receive LAN broadcasts or that exposes the login console on the LAN."}

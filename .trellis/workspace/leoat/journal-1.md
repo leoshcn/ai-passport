@@ -64,3 +64,35 @@ The setup page now lists scanned 2.4 GHz networks for the user to pick, with a c
 ### Status
 
 [OK] **Completed**
+
+
+## Session 3: Dashboard confirm click blanks the screen
+
+**Date**: 2026-10-02
+**Task**: Dashboard confirm click blanks the screen
+**Branch**: `feature/xhs-dashboard`
+
+### Summary
+
+Dashboard OK click turns the backlight off instead of refreshing. Any function key only restores brightness. Settings keep their existing confirm actions. Flashed to the device and the user confirmed the behavior.
+
+### Main Changes
+
+- Dashboard OK click enters backlight-off standby and no longer requests a fetch.
+- The next up, down, or OK press only restores 70 percent brightness.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `6cb883b` | (see git log) |
+
+### Testing
+
+- [OK] Host tests in tests/test_xhs_logic.c passed.
+- [OK] ESP-IDF 5.5.3 firmware build passed and was flashed to COM3.
+- [OK] User confirmed on device: OK click blanks the screen and any key wakes it.
+
+### Status
+
+[OK] **Completed**
