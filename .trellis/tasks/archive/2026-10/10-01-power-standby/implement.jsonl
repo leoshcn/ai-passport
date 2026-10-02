@@ -1,0 +1,2 @@
+{"file": ".trellis/tasks/10-01-power-standby/research/standby-constraints.md", "reason": "Power button is not readable, and this board has no key-wake circuit. Standby must stay at backlight-off while the ADC sampler and Wi-Fi keep running."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Standby state belongs in the host-testable logic layer. Backlight changes stay in the application task, and the network layer stays unchanged."}

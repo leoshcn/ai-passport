@@ -1,0 +1,2 @@
+{"file": ".trellis/tasks/10-01-power-standby/research/standby-constraints.md", "reason": "Reject a solution that enters light or deep sleep, or that calls the terminal display deep-sleep path, because function-key wake depends on the ADC sampler."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check that button callbacks stay non-blocking and that display, logic, and network do not each invent a separate standby flag."}
