@@ -107,6 +107,7 @@ static void test_buttons(void)
     assert(!app.config_ok);
     xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
     assert(!app.request_fetch);
+    assert(!app.standby);
     xhs_app_handle(&app, XHS_EVENT_OK_LONG);
     assert(app.view == XHS_VIEW_SETTINGS);
     xhs_app_handle(&app, XHS_EVENT_OK_LONG);
@@ -116,7 +117,11 @@ static void test_buttons(void)
     assert(app.view == XHS_VIEW_DASHBOARD);
     assert(app.config_ok);
     xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
-    assert(app.request_fetch);
+    assert(app.standby);
+    assert(!app.request_fetch);
+    xhs_app_handle(&app, XHS_EVENT_OK_LONG);
+    assert(!app.standby);
+    assert(app.view == XHS_VIEW_DASHBOARD);
     xhs_app_handle(&app, XHS_EVENT_OK_LONG);
     assert(app.view == XHS_VIEW_SETTINGS);
     assert(app.settings.mode == XHS_MODE_NAV);
@@ -177,6 +182,7 @@ static void test_buttons(void)
     assert(app.settings.period == period_before);
     assert(!app.request_reprovision);
     xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    assert(!app.standby);
     assert(app.request_reprovision);
     assert(app.view == XHS_VIEW_PROVISION);
     assert(!app.config_ok);
@@ -205,6 +211,7 @@ static void test_buttons(void)
     assert(app.settings.selected == XHS_ITEM_REFRESH);
     xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
     assert(app.view == XHS_VIEW_DASHBOARD);
+    assert(!app.standby);
     assert(app.request_fetch);
     assert(!app.save_settings);
     assert(!app.request_reprovision);
@@ -223,6 +230,7 @@ static void test_buttons(void)
     period_before = app.settings.period;
     xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
     assert(app.view == XHS_VIEW_DASHBOARD);
+    assert(!app.standby);
     assert(!app.request_fetch);
     assert(!app.request_reprovision);
     assert(!app.save_settings);
@@ -248,6 +256,7 @@ static void test_buttons(void)
     assert(!app.request_fetch);
     xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
     assert(app.view == XHS_VIEW_DASHBOARD);
+    assert(!app.standby);
     assert(app.request_fetch);
     assert(!app.save_settings);
     assert(!app.request_reprovision);
@@ -256,6 +265,95 @@ static void test_buttons(void)
     assert(app.settings.period == period_before);
 }
 
+
+static void test_standby(void)
+{
+    xhs_app_t app;
+    xhs_app_init(&app, true, XHS_PROV_READY, true, true, XHS_PERIOD_DAY);
+    xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    assert(app.standby);
+    assert(!app.request_fetch);
+    assert(app.view == XHS_VIEW_DASHBOARD);
+
+    xhs_app_handle(&app, XHS_EVENT_UP_CLICK);
+    assert(!app.standby);
+    assert(!app.request_fetch);
+    assert(app.view == XHS_VIEW_DASHBOARD);
+    xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    xhs_app_handle(&app, XHS_EVENT_DOWN_CLICK);
+    assert(!app.standby);
+    assert(app.view == XHS_VIEW_DASHBOARD);
+    xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    assert(!app.standby);
+    assert(!app.request_fetch);
+    assert(app.view == XHS_VIEW_DASHBOARD);
+
+    xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    assert(app.standby);
+    xhs_app_handle(&app, XHS_EVENT_OK_LONG);
+    assert(!app.standby);
+    assert(app.view == XHS_VIEW_DASHBOARD);
+    assert(app.settings.mode == XHS_MODE_NAV);
+    xhs_app_handle(&app, XHS_EVENT_OK_LONG);
+    assert(app.view == XHS_VIEW_SETTINGS);
+    assert(!app.standby);
+
+    xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    assert(app.settings.mode == XHS_MODE_EDIT);
+    assert(!app.standby);
+    assert(!app.save_settings);
+
+    xhs_app_init(&app, true, XHS_PROV_READY, false, true, XHS_PERIOD_DAY);
+    assert(app.view == XHS_VIEW_DASHBOARD);
+    assert(app.config_ok);
+    xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    assert(app.standby);
+    assert(!app.request_fetch);
+    xhs_app_handle(&app, XHS_EVENT_FETCH_FAIL);
+    assert(app.standby);
+    assert(app.view == XHS_VIEW_FAILURE);
+    xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    assert(!app.standby);
+    assert(app.view == XHS_VIEW_FAILURE);
+    xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    assert(!app.standby);
+
+    xhs_app_init(&app, true, XHS_PROV_READY, true, true, XHS_PERIOD_DAY);
+    xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    xhs_app_handle(&app, XHS_EVENT_FETCH_OK);
+    assert(app.standby);
+    assert(app.has_stats);
+    assert(!app.update_failed);
+    assert(app.view == XHS_VIEW_DASHBOARD);
+    xhs_app_handle(&app, XHS_EVENT_FETCH_FAIL);
+    assert(app.standby);
+    assert(app.update_failed);
+    assert(app.view == XHS_VIEW_DASHBOARD);
+
+    xhs_app_init(&app, true, XHS_PROV_AP, false, true, XHS_PERIOD_DAY);
+    xhs_app_handle(&app, XHS_EVENT_OK_LONG);
+    xhs_app_handle(&app, XHS_EVENT_DOWN_CLICK);
+    xhs_app_handle(&app, XHS_EVENT_DOWN_CLICK);
+    assert(app.settings.selected == XHS_ITEM_REFRESH);
+    xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    assert(app.view == XHS_VIEW_DASHBOARD);
+    assert(!app.config_ok);
+    assert(!app.standby);
+    xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    assert(app.standby);
+    assert(!app.request_fetch);
+
+    xhs_app_init(&app, true, XHS_PROV_AP, false, true, XHS_PERIOD_DAY);
+    assert(app.view == XHS_VIEW_PROVISION);
+    xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    assert(!app.standby);
+    xhs_app_init(&app, true, XHS_PROV_PAIR, false, true, XHS_PERIOD_DAY);
+    assert(app.view == XHS_VIEW_PAIRING);
+    xhs_app_handle(&app, XHS_EVENT_OK_CLICK);
+    assert(!app.standby);
+    assert(!app.request_fetch);
+}
 
 static void test_parse(void)
 {
@@ -521,6 +619,7 @@ int main(void)
     test_config_and_url();
     test_schedule();
     test_buttons();
+    test_standby();
     test_parse();
     test_provision();
     test_scan_merge();

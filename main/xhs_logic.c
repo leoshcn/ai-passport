@@ -176,6 +176,12 @@ static void move_selection(xhs_settings_t *settings, int delta)
     settings->selected = (xhs_item_t)next;
 }
 
+static bool key_event(xhs_event_t event)
+{
+    return event == XHS_EVENT_UP_CLICK || event == XHS_EVENT_DOWN_CLICK ||
+           event == XHS_EVENT_OK_CLICK || event == XHS_EVENT_OK_LONG;
+}
+
 void xhs_app_handle(xhs_app_t *app, xhs_event_t event)
 {
     if (!app) return;
@@ -201,6 +207,12 @@ void xhs_app_handle(xhs_app_t *app, xhs_event_t event)
         return;
     }
 
+    /* 点亮必须先于仪表盘单击，否则用来唤醒的确定会马上再次熄屏。 */
+    if (app->standby && key_event(event)) {
+        app->standby = false;
+        return;
+    }
+
     if (!app->storage_ok) return;
 
     if (event == XHS_EVENT_OK_LONG) {
@@ -217,7 +229,7 @@ void xhs_app_handle(xhs_app_t *app, xhs_event_t event)
     }
 
     if (app->view == XHS_VIEW_DASHBOARD) {
-        if (event == XHS_EVENT_OK_CLICK && app->config_ok) app->request_fetch = true;
+        if (event == XHS_EVENT_OK_CLICK) app->standby = true;
         return;
     }
 

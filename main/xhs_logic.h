@@ -80,6 +80,8 @@ typedef struct {
     bool request_reprovision;
     /* 已有统计时拉取失败仍留在数据页，用这一位让界面标出失败。成功后清除。 */
     bool update_failed;
+    /* 仪表盘确定单击置位。待机中的功能键单击和确定长按只清除。拉取不改变它。 */
+    bool standby;
     char pair_code[8];
 } xhs_app_t;
 

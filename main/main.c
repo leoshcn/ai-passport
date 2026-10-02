@@ -1,7 +1,8 @@
 // main/main.c —— 小红书创作者数据仪表盘。
 //
 // 按键（上 / 下 / 确定）：
-//   仪表盘：确定短按立即更新，确定长按进入设置。
+//   仪表盘：确定短按熄屏。熄屏后再按上、下或确定只点亮，长按确定也只点亮。
+//   点亮后长按确定进入设置。
 //   设置：上/下切换项目，确定进入调整；调整中上/下改值，确定写回。
 //   「立即刷新」按一次确定回到仪表盘；已配网时立刻拉取，不进入调整。
 //   「重新配网」再按确定后清除 Wi-Fi、后端地址和令牌，并回到热点。统计数据保留。
@@ -68,14 +69,22 @@ static void push_schedule(void)
                          s_saved.stats.fetched_unix, s_saved.has_stats);
 }
 
-static void handle_button(bsp_btn_t btn, bsp_btn_ev_t event)
+static void apply_backlight(bool was_dimmed, bool was_standby)
 {
-    s_active_tick = xTaskGetTickCount();
-    if (s_dimmed) {
+    if (s_app.standby) {
+        bsp_display_backlight(0);
+        s_dimmed = true;
+        return;
+    }
+    if (was_standby || was_dimmed) {
         bsp_display_backlight(BL_ACTIVE);
         s_dimmed = false;
     }
+}
 
+static void handle_button(bsp_btn_t btn, bsp_btn_ev_t event)
+{
+    /* 按下和双击不映射。button 4.2.0 在双击成立时不再另报单击。 */
     xhs_event_t mapped;
     if (event == BSP_BTN_LONG && btn == BSP_BTN_OK) mapped = XHS_EVENT_OK_LONG;
     else if (event == BSP_BTN_CLICK && btn == BSP_BTN_UP) mapped = XHS_EVENT_UP_CLICK;
@@ -83,6 +92,9 @@ static void handle_button(bsp_btn_t btn, bsp_btn_ev_t event)
     else if (event == BSP_BTN_CLICK && btn == BSP_BTN_OK) mapped = XHS_EVENT_OK_CLICK;
     else return;
 
+    bool was_dimmed = s_dimmed;
+    bool was_standby = s_app.standby;
+    s_active_tick = xTaskGetTickCount();
     xhs_app_handle(&s_app, mapped);
     if (s_app.save_settings) {
         if (xhs_store_save_settings(s_app.settings.auto_update, s_app.settings.period) != ESP_OK) {
@@ -93,6 +105,7 @@ static void handle_button(bsp_btn_t btn, bsp_btn_ev_t event)
     if (s_app.request_fetch && s_net_up) xhs_net_request_fetch();
     if (s_app.request_reprovision && s_net_up) xhs_net_request_reprovision();
     present();
+    apply_backlight(was_dimmed, was_standby);
 }
 
 static void handle_result(const xhs_fetch_result_t *result)
@@ -136,7 +149,7 @@ static void input_task(void *arg)
         button_event_t button;
         if (s_buttons && xQueueReceive(s_buttons, &button, pdMS_TO_TICKS(500)) == pdTRUE) {
             handle_button(button.btn, button.event);
-        } else if (!s_dimmed &&
+        } else if (!s_app.standby && !s_dimmed &&
                    (xTaskGetTickCount() - s_active_tick) >= pdMS_TO_TICKS(IDLE_MS)) {
             bsp_display_backlight(BL_IDLE);
             s_dimmed = true;
