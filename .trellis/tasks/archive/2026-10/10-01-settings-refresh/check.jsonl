@@ -1,0 +1,3 @@
+{"file": ".trellis/tasks/10-01-settings-refresh/research/settings-refresh.md", "reason": "Reject a second OK, a new loading screen, a new net entry point, and a fourth row that covers the return hint."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check that fetch policy stays in xhs_logic, the screen does not decide config_ok, and NVS is not written just because refresh was chosen."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Check that manual refresh still uses request_fetch and the dashboard OK path, including the case where the net task is not up."}

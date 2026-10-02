@@ -1,0 +1,3 @@
+{"file": ".trellis/tasks/10-01-settings-refresh/research/settings-refresh.md", "reason": "Four 56 px rows cover the hint on a 240x320 panel. One OK reuses request_fetch and the existing config_ok gate; do not add a net API or a second confirm step."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "The new menu action belongs in xhs_logic. UI only renders it, and main.c already turns request_fetch into xhs_net_request_fetch."}
+{"file": ".trellis/spec/guides/code-reuse-thinking-guide.md", "reason": "Dashboard OK already requests a fetch. The settings row must set the same flag instead of a parallel refresh path."}
