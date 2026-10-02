@@ -30,7 +30,7 @@ The page button labeled 退出登录 clears the saved creator session and the st
 
 Cookie and pairing state are in the `xhs-data` volume and survive a container restart.
 
-`GET /api/v1/stats` and `GET /api/v1/avatar` are unchanged. Both require header `X-Device-Token`. Stats are cached for 30 seconds. A missing cookie or a rejected session returns HTTP 503 and `{"ok": false}` without logging the cookie.
+`GET /api/v1/stats` and `GET /api/v1/avatar` are unchanged. Both require header `X-Device-Token`. Stats are cached for 30 seconds. The `fetched_at` text is China Standard Time (UTC+8), because the device shows that string as written and the container clock is UTC. A missing cookie or a rejected session returns HTTP 503 and `{"ok": false}` without logging the cookie.
 
 The 7-day value subtracts an unfollow count when the creator payload includes one. When the payload only includes `rise_fans_count`, that new-follower number is used.
 

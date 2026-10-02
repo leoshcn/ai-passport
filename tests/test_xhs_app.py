@@ -11,7 +11,8 @@ import unittest
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 from pathlib import Path
 
 import sys
@@ -20,6 +21,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from xhs_fetch import (  # noqa: E402
+    fetch_stats,
     net_followers_7d,
     normalize_cookie,
     profile_fields,
@@ -76,6 +78,15 @@ class BackendTest(unittest.TestCase):
         self.assertEqual(built["fetched_at"], "2026-09-30 17:40")
         self.assertTrue(built["ok"])
 
+    def test_fetch_stats_labels_china_standard_time(self) -> None:
+        stamped = datetime(2026, 10, 2, 9, 1, tzinfo=timezone(timedelta(hours=8)))
+        with patch("xhs_fetch._creator_get", side_effect=[PROFILE, NOTES]), patch(
+            "xhs_fetch.china_now", return_value=stamped
+        ):
+            stats, _avatar = fetch_stats("cookie")
+        self.assertEqual(stats["fetched_at"], "2026-10-02 09:01")
+        self.assertEqual(stats["fetched_unix"], int(stamped.timestamp()))
+
     def test_ui_strings_are_present(self) -> None:
         source = (ROOT / "main" / "xhs_ui.c").read_text(encoding="utf-8")
         for text in (
@@ -84,9 +95,11 @@ class BackendTest(unittest.TestCase):
             "获赞与收藏",
             "近7日净涨粉",
             "更新于",
+            "更新失败",
             "尚未更新",
             "自动更新",
             "更新频率",
+            "立即刷新",
             "每小时",
             "每天",
             "开",

@@ -9,8 +9,11 @@ from __future__ import annotations
 import hmac
 import json
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
+
+# 容器默认是 UTC。设备把这串文字原样显示，所以固定用中国标准时间。
+CHINA_STANDARD_TIME = timezone(timedelta(hours=8))
 
 CREATOR_PROFILE = "https://creator.xiaohongshu.com/api/galaxy/creator/home/personal_info"
 CREATOR_NOTES = "https://creator.xiaohongshu.com/api/galaxy/creator/data/note_detail_new"
@@ -115,10 +118,14 @@ def _creator_get(url: str, cookie: str) -> Any:
         return json.loads(response.read().decode("utf-8"))
 
 
+def china_now() -> datetime:
+    return datetime.now(CHINA_STANDARD_TIME)
+
+
 def fetch_stats(cookie: str, when: datetime | None = None) -> tuple[dict[str, Any], str]:
     profile = _creator_get(CREATOR_PROFILE, cookie)
     notes = _creator_get(CREATOR_NOTES, cookie)
-    moment = when or datetime.now().astimezone()
+    moment = when or china_now()
     _name, _fans, _likes, avatar = profile_fields(profile)
     return stats_from_payloads(profile, notes, moment), avatar
 

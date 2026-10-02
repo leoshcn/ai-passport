@@ -30,7 +30,7 @@ powershell -File backend/start-xhs.ps1
 
 Cookie 和配对状态放在 `xhs-data` 数据卷里，容器重启后还在。
 
-`GET /api/v1/stats` 和 `GET /api/v1/avatar` 保持原样。两个请求都要带 `X-Device-Token`。统计缓存 30 秒。缺少 Cookie 或会话被拒绝时返回 HTTP 503 和 `{"ok": false}`，日志里不写 Cookie。
+`GET /api/v1/stats` 和 `GET /api/v1/avatar` 保持原样。两个请求都要带 `X-Device-Token`。统计缓存 30 秒。`fetched_at` 使用中国标准时间（UTC+8），因为设备原样显示这串文字，而容器时钟是 UTC。缺少 Cookie 或会话被拒绝时返回 HTTP 503 和 `{"ok": false}`，日志里不写 Cookie。
 
 近 7 日净涨粉会在创作平台同时给出掉粉数时用新增减去掉粉。如果响应里只有 `rise_fans_count`，就使用这个 7 日新增粉丝数。
 
