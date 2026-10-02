@@ -42,3 +42,25 @@ Added a one-press refresh row, a failure label when older stats remain, and Chin
 ### Next Steps
 
 - Rebuild the backend container, then refresh once more so the device shows Beijing time.
+
+
+## Session 2: Phone Wi-Fi setup page
+
+**Date**: 2026-10-02
+**Task**: Phone Wi-Fi setup page
+**Branch**: `feature/xhs-dashboard`
+
+### Summary
+
+The setup page now lists scanned 2.4 GHz networks for the user to pick, with a collapsed manual name and the same card layout on every status. Firmware was flashed to COM3 without clearing NVS; the new page still needs a re-provision on the device.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `ea16381` | (see git log) |
+| `a311e0c` | (see git log) |
+
+### Status
+
+[OK] **Completed**
