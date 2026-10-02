@@ -392,6 +392,27 @@ class PairingAndConsoleTest(unittest.TestCase):
             else:
                 os.geteuid = original  # type: ignore[attr-defined]
 
+    def test_open_console_learns_a_later_pair_code(self) -> None:
+        status, page = self._request(self.console_url + "/")
+        self.assertEqual(status, 200)
+        self.assertIn(b'id="pairs"', page)
+        self.assertIn(b'data-codes=""', page)
+        self.assertIn("设备亮出配对码之后".encode("utf-8"), page)
+        self.assertIn(b"renderPairs(data.pending)", page)
+
+        code = "M4QK"
+        status, body = self._request(
+            self.console_url + "/api/discover",
+            data=json.dumps({"code": code}).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+        )
+        self.assertEqual(status, 200)
+        status, body = self._request(self.console_url + "/api/status")
+        self.assertEqual(json.loads(body)["pending"], [code])
+        status, page = self._request(self.console_url + "/")
+        self.assertIn(b'data-codes="M4QK"', page)
+        self.assertIn("确认 M4QK".encode("utf-8"), page)
+
     def test_pair_confirm_delivers_token_only_on_the_device_channel(self) -> None:
         code = "AB3K"
         status, body = self._request(self.api_url + "/api/v1/pair?code=" + code)

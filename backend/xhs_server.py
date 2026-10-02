@@ -219,10 +219,54 @@ textarea {
 </details>
 <section class="pairs">
   <h2>设备配对</h2>
-  {{PAIRS}}
+  <div id="pairs" data-codes="{{PAIR_CODES}}">{{PAIRS}}</div>
 </section>
 </main>
 <script>
+var PAIR_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+function renderPairs(pending) {
+  var box = document.getElementById("pairs");
+  if (!box) return;
+  var codes = [];
+  if (pending && pending.length) {
+    for (var i = 0; i < pending.length; i++) {
+      var code = pending[i];
+      if (typeof code !== "string" || code.length !== 4) continue;
+      var ok = true;
+      for (var c = 0; c < code.length; c++) {
+        if (PAIR_ALPHABET.indexOf(code.charAt(c)) < 0) ok = false;
+      }
+      if (ok) codes.push(code);
+    }
+  }
+  var signature = codes.join(",");
+  if (box.getAttribute("data-codes") === signature) return;
+  box.setAttribute("data-codes", signature);
+  while (box.firstChild) box.removeChild(box.firstChild);
+  if (!codes.length) {
+    var empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "设备亮出配对码之后，确认按钮会出现在这里。";
+    box.appendChild(empty);
+    return;
+  }
+  for (var j = 0; j < codes.length; j++) {
+    var form = document.createElement("form");
+    form.className = "pair";
+    form.method = "post";
+    form.action = "/api/pair/confirm";
+    var input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "code";
+    input.value = codes[j];
+    var button = document.createElement("button");
+    button.type = "submit";
+    button.textContent = "确认 " + codes[j];
+    form.appendChild(input);
+    form.appendChild(button);
+    box.appendChild(form);
+  }
+}
 setInterval(function () {
   fetch("/api/status").then(function (response) { return response.json(); }).then(function (data) {
     if (!data) return;
@@ -244,6 +288,7 @@ setInterval(function () {
       var block = document.getElementById("qr-block");
       if (block && block.parentNode) block.parentNode.removeChild(block);
     }
+    renderPairs(data.pending);
   }).catch(function () {});
 }, 3000);
 </script>
@@ -429,9 +474,14 @@ class Service:
             login = "logged_out"
         pending = payload["pending"]
         rows = []
+        codes: list[str] = []
         if isinstance(pending, list):
             for code in pending:
-                safe = _html_escape(str(code))
+                text = str(code)
+                if not pair_code_ok(text):
+                    continue
+                codes.append(text)
+                safe = _html_escape(text)
                 rows.append(
                     "<form class=\"pair\" method=\"post\" action=\"/api/pair/confirm\">"
                     "<input type=\"hidden\" name=\"code\" value=\"%s\">"
@@ -458,6 +508,7 @@ class Service:
                 .replace("{{NOTICE}}", _html_escape(self._login_error))
                 .replace("{{LOGOUT}}", logout)
                 .replace("{{QR}}", qr)
+                .replace("{{PAIR_CODES}}", _html_escape(",".join(codes)))
                 .replace("{{PAIRS}}", pairs))
         return page.encode("utf-8")
 
