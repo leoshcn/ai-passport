@@ -1,0 +1,3 @@
+{"file": ".trellis/tasks/10-02-wifi-provision-ux/research/apsta-scan.md", "reason": "Check that scans are not started from the HTTP handler and that the body limit covers the 770-byte worst case."}
+{"file": "docs/reference/phoenixzhc/softap-provisioning-and-resource-budget.md", "reason": "Check socket count, chunked HTML, no external assets, and credentials not persisted before join success."}
+{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Check SSID merge and form parsing live in the host-testable layer, not only in the IDF handler."}
