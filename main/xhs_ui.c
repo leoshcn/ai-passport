@@ -102,7 +102,8 @@ static void show_failure(void)
 }
 
 static void show_dashboard(const xhs_stats_t *stats, bool has_stats,
-                           const uint8_t *avatar, bool has_avatar)
+                           const uint8_t *avatar, bool has_avatar,
+                           bool update_failed)
 {
     s_battery = NULL;
     lv_obj_t *screen = screen_new();
@@ -169,9 +170,16 @@ static void show_dashboard(const xhs_stats_t *stats, bool has_stats,
     metric(screen, 212, "近7日净涨粉", net, net_color);
 
     char when[48];
-    if (!has_stats || !stats->fetched_at[0]) snprintf(when, sizeof(when), "尚未更新");
-    else snprintf(when, sizeof(when), "更新于 %s", stats->fetched_at);
-    label_at(screen, 16, 278, when, &s_text_font, COL_MUTED);
+    uint32_t when_color = COL_MUTED;
+    if (update_failed && has_stats) {
+        snprintf(when, sizeof(when), "更新失败");
+        when_color = COL_DOWN;
+    } else if (!has_stats || !stats->fetched_at[0]) {
+        snprintf(when, sizeof(when), "尚未更新");
+    } else {
+        snprintf(when, sizeof(when), "更新于 %s", stats->fetched_at);
+    }
+    label_at(screen, 16, 278, when, &s_text_font, when_color);
     show_screen(screen);
 }
 
@@ -204,8 +212,12 @@ static void show_pairing(const char *pair_code)
 static void setting_row(lv_obj_t *screen, int y, const char *name, const char *value,
                         bool selected, bool editing)
 {
-    lv_obj_t *obj = card(screen, 16, y, 208, 56, selected);
-    label_at(obj, 12, 20, name, &s_text_font, COL_INK);
+    lv_obj_t *obj = card(screen, 16, y, 208, 46, selected);
+    lv_obj_t *name_label = lv_label_create(obj);
+    lv_obj_set_style_text_font(name_label, &s_text_font, 0);
+    lv_obj_set_style_text_color(name_label, lv_color_hex(COL_INK), 0);
+    lv_label_set_text(name_label, name);
+    lv_obj_align(name_label, LV_ALIGN_LEFT_MID, 12, 0);
     lv_obj_t *value_label = lv_label_create(obj);
     lv_obj_set_style_text_font(value_label, &s_text_font, 0);
     lv_obj_set_style_text_color(value_label,
@@ -222,19 +234,22 @@ static void show_settings(const xhs_settings_t *settings)
     label_at(screen, 16, 28, "设置", &s_text_font, COL_INK);
 
     bool editing = settings->mode == XHS_MODE_EDIT;
-    setting_row(screen, 64, "自动更新",
+    /* 四行高 46、间距 6，从 y=56 排到末行 y=212，末行底边 y=258。 */
+    setting_row(screen, 56, "自动更新",
                 settings->auto_update ? "开" : "关",
                 settings->selected == XHS_ITEM_AUTO, editing);
-    setting_row(screen, 128, "更新频率",
+    setting_row(screen, 108, "更新频率",
                 settings->period == XHS_PERIOD_HOUR ? "每小时" : "每天",
                 settings->selected == XHS_ITEM_PERIOD, editing);
-    setting_row(screen, 192, "重新配网",
+    setting_row(screen, 160, "立即刷新", "",
+                settings->selected == XHS_ITEM_REFRESH, editing);
+    setting_row(screen, 212, "重新配网",
                 editing && settings->selected == XHS_ITEM_REPROVISION ? "确认" : "进入",
                 settings->selected == XHS_ITEM_REPROVISION, editing);
 
     const char *hint = "长按确认键返回";
     if (editing && settings->selected == XHS_ITEM_REPROVISION) hint = "确认键完成";
-    else if (editing) hint = "上下键调整，确认键完成";
+    else if (editing && settings->selected != XHS_ITEM_REFRESH) hint = "上下键调整，确认键完成";
     label_at(screen, 16, 268, hint, &s_text_font, COL_MUTED);
     show_screen(screen);
 }
@@ -260,11 +275,13 @@ void xhs_ui_set_battery(int soc_percent)
 void xhs_ui_show(xhs_view_t view, const xhs_settings_t *settings,
                  const xhs_stats_t *stats, bool has_stats,
                  const uint8_t *avatar, bool has_avatar,
-                 xhs_prov_phase_t phase, const char *pair_code)
+                 xhs_prov_phase_t phase, const char *pair_code,
+                 bool update_failed)
 {
     if (view == XHS_VIEW_SETTINGS && settings) show_settings(settings);
-    else if (view == XHS_VIEW_DASHBOARD) show_dashboard(stats, has_stats, avatar, has_avatar);
-    else if (view == XHS_VIEW_PROVISION) show_provision(phase);
+    else if (view == XHS_VIEW_DASHBOARD) {
+        show_dashboard(stats, has_stats, avatar, has_avatar, update_failed);
+    } else if (view == XHS_VIEW_PROVISION) show_provision(phase);
     else if (view == XHS_VIEW_PAIRING) show_pairing(pair_code);
     else show_failure();
 }

@@ -155,8 +155,17 @@ static void adjust_selected(xhs_settings_t *settings)
         settings->auto_update = !settings->auto_update;
         return;
     }
+    if (settings->selected != XHS_ITEM_PERIOD) return;
     settings->period = settings->period == XHS_PERIOD_HOUR
         ? XHS_PERIOD_DAY : XHS_PERIOD_HOUR;
+}
+
+/* 立即刷新没有调整态。一次确定回到仪表盘；只有配网完成才请求拉取。 */
+static void leave_for_refresh(xhs_app_t *app)
+{
+    app->view = XHS_VIEW_DASHBOARD;
+    app->settings.mode = XHS_MODE_NAV;
+    if (app->config_ok) app->request_fetch = true;
 }
 
 static void move_selection(xhs_settings_t *settings, int delta)
@@ -176,6 +185,7 @@ void xhs_app_handle(xhs_app_t *app, xhs_event_t event)
 
     if (event == XHS_EVENT_FETCH_OK) {
         app->has_stats = true;
+        app->update_failed = false;
         if (app->view == XHS_VIEW_FAILURE && app->config_ok) {
             app->view = XHS_VIEW_DASHBOARD;
         }
@@ -184,6 +194,9 @@ void xhs_app_handle(xhs_app_t *app, xhs_event_t event)
     if (event == XHS_EVENT_FETCH_FAIL) {
         if (app->phase == XHS_PROV_READY && !app->has_stats && app->view != XHS_VIEW_SETTINGS) {
             app->view = XHS_VIEW_FAILURE;
+            app->update_failed = false;
+        } else if (app->has_stats) {
+            app->update_failed = true;
         }
         return;
     }
@@ -213,7 +226,15 @@ void xhs_app_handle(xhs_app_t *app, xhs_event_t event)
     if (app->settings.mode == XHS_MODE_NAV) {
         if (event == XHS_EVENT_UP_CLICK) move_selection(&app->settings, -1);
         else if (event == XHS_EVENT_DOWN_CLICK) move_selection(&app->settings, 1);
-        else if (event == XHS_EVENT_OK_CLICK) app->settings.mode = XHS_MODE_EDIT;
+        else if (event == XHS_EVENT_OK_CLICK) {
+            if (app->settings.selected == XHS_ITEM_REFRESH) leave_for_refresh(app);
+            else app->settings.mode = XHS_MODE_EDIT;
+        }
+        return;
+    }
+
+    if (app->settings.selected == XHS_ITEM_REFRESH) {
+        if (event == XHS_EVENT_OK_CLICK) leave_for_refresh(app);
         return;
     }
 

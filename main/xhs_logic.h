@@ -26,8 +26,9 @@ typedef enum {
 typedef enum {
     XHS_ITEM_AUTO = 0,
     XHS_ITEM_PERIOD = 1,
-    XHS_ITEM_REPROVISION = 2,
-    XHS_ITEM_COUNT = 3,
+    XHS_ITEM_REFRESH = 2,
+    XHS_ITEM_REPROVISION = 3,
+    XHS_ITEM_COUNT = 4,
 } xhs_item_t;
 
 typedef enum {
@@ -77,6 +78,8 @@ typedef struct {
     bool request_fetch;
     bool save_settings;
     bool request_reprovision;
+    /* 已有统计时拉取失败仍留在数据页，用这一位让界面标出失败。成功后清除。 */
+    bool update_failed;
     char pair_code[8];
 } xhs_app_t;
 

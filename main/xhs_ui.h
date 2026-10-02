@@ -14,4 +14,5 @@ void xhs_ui_set_battery(int soc_percent);
 void xhs_ui_show(xhs_view_t view, const xhs_settings_t *settings,
                  const xhs_stats_t *stats, bool has_stats,
                  const uint8_t *avatar, bool has_avatar,
-                 xhs_prov_phase_t phase, const char *pair_code);
+                 xhs_prov_phase_t phase, const char *pair_code,
+                 bool update_failed);

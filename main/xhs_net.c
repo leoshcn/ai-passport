@@ -607,10 +607,18 @@ static bool http_get(const char *url, const char *token, uint8_t *buf, size_t ca
         esp_http_client_set_header(client, "X-Device-Token", token) != ESP_OK) {
         goto done;
     }
-    if (esp_http_client_open(client, 0) != ESP_OK) goto done;
+    if (esp_http_client_open(client, 0) != ESP_OK) {
+        ESP_LOGW(TAG, "http open failed");
+        goto done;
+    }
     (void)esp_http_client_fetch_headers(client);
-    if (esp_http_client_get_status_code(client) != 200) goto close_client;
+    int status = esp_http_client_get_status_code(client);
+    if (status != 200) {
+        ESP_LOGW(TAG, "http status %d", status);
+        goto close_client;
+    }
     ok = read_body(client, buf, cap, used, text);
+    if (!ok) ESP_LOGW(TAG, "http body rejected");
 close_client:
     esp_http_client_close(client);
 done:

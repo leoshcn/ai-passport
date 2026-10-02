@@ -3,6 +3,7 @@
 // 按键（上 / 下 / 确定）：
 //   仪表盘：确定短按立即更新，确定长按进入设置。
 //   设置：上/下切换项目，确定进入调整；调整中上/下改值，确定写回。
+//   「立即刷新」按一次确定回到仪表盘；已配网时立刻拉取，不进入调整。
 //   「重新配网」再按确定后清除 Wi-Fi、后端地址和令牌，并回到热点。统计数据保留。
 //   设置里长按确定回到当前主画面。
 // 没有 NVS 配网记录时打开热点。存储初始化失败才停在失败页，并且不擦除分区。
@@ -54,7 +55,8 @@ static void present(void)
     int soc = bsp_battery_soc();
     if (!bsp_lvgl_lock(500)) return;
     xhs_ui_show(s_app.view, &s_app.settings, &s_saved.stats, s_saved.has_stats,
-                s_saved.avatar, s_saved.has_avatar, s_app.phase, s_app.pair_code);
+                s_saved.avatar, s_saved.has_avatar, s_app.phase, s_app.pair_code,
+                s_app.update_failed);
     xhs_ui_set_battery(soc);
     bsp_lvgl_unlock();
 }
@@ -120,7 +122,8 @@ static void handle_result(const xhs_fetch_result_t *result)
     } else {
         xhs_view_t before = s_app.view;
         xhs_app_handle(&s_app, XHS_EVENT_FETCH_FAIL);
-        if (s_app.view == before) return;
+        if (s_app.view == before && !s_app.update_failed) return;
+        if (s_app.view == XHS_VIEW_SETTINGS) return;
     }
     present();
 }
@@ -218,7 +221,8 @@ void app_main(void)
     if (bsp_lvgl_lock(1000)) {
         xhs_ui_init();
         xhs_ui_show(s_app.view, &s_app.settings, &s_saved.stats, s_saved.has_stats,
-                    s_saved.avatar, s_saved.has_avatar, s_app.phase, s_app.pair_code);
+                    s_saved.avatar, s_saved.has_avatar, s_app.phase, s_app.pair_code,
+                    s_app.update_failed);
         xhs_ui_set_battery(bsp_battery_soc());
         bsp_lvgl_unlock();
     }
